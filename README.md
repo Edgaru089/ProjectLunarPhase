@@ -1,6 +1,6 @@
 # ProjectLunarPhase
 
-A simple web server framework in C++, created after being much annoyed by the strange syntax of Python
+A simple web server framework in C++, created after being much annoyed by the strange syntax of Python - See oy other repository [FlaskSite](https://github.com/Edgaru089/FlaskSite).
 
 Part of the BNDS technological course "Database"
 
