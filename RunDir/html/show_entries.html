@@ -1,0 +1,27 @@
+﻿
+		<!--请非常关注下方的连接写法（怎么进行controler跳转）-->
+		<div class="metanav">
+			<a href="/login">Login</a>
+		</div>
+
+		%BODY%
+
+		<form class="entry" action="/share" method="POST">
+			<dl>
+				<dt>Username:
+				<dd><input type=text size=30 name=username>
+				<dt>Title:
+				<dd><input type=text size=30 name=title>
+				<dt>Text:
+				<dd><textarea name=body rows=5 cols=40></textarea>
+				<dd><input type=submit value=Share>
+			</dl>
+		</form>
+
+		<ul class="entries">
+			<li><h1>任务一</h1>制作一个登录页面</li>
+			<li><h1>任务二</h1>制作一个留言板页面</li>
+			<li><h1>任务三</h1>调整两个页面的css</li>
+			<li><h1>任务四</h1>从登录页面链接到留言板页面</li>
+		</ul>
+		
