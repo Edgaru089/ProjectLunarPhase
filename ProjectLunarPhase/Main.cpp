@@ -7,10 +7,9 @@ Log dlog;
 
 int main(int argc, char* argv[]) {
 	DatabaseHandler db;
-
-	setlocale(LC_ALL, "en_US.UTF-8");
-
-	dlog.addOutputStream(wclog);
+	locale::global(locale("", LC_CTYPE));
+	wcout.imbue(locale("", LC_CTYPE));
+	dlog.addOutputStream(wcout);
 
 	//MySql mysql("localhost","bndsdb","bnds-db-admin-ScienceAndTechnolgy");
 	db.connect();
@@ -47,10 +46,14 @@ int main(int argc, char* argv[]) {
 		if (request.GetHeaderValue("Content-Type") != "application/x-www-form-urlencoded")
 			return error(404);
 		auto instances = decodeFormUrlEncoded(request.GetBody());
-		for (auto& i : instances)
-			i.first = '%' + toUppercase(i.first) + '%';
-		instances.push_back({ "%TITLE%", "Login" });
-		return filetemplate(L"./html/login_info.html", instances);
+		if (db.verifyUser(instances["username"], instances["password"])) {
+			string cookie = generateCookie();
+			db.setUserCookie(instances["username"], cookie);
+			return redirect("/posts", 302, { { "id", cookie } });
+		}
+		else
+			return redirect("/login", 302);
+
 	}, Instance::Post);
 
 	instance.registerRouteRule("/share", ".*", ROUTER(request){
@@ -74,7 +77,8 @@ int main(int argc, char* argv[]) {
 		return redirect("/posts", 302);
 	}, Instance::Post);
 
-	instance.registerRouteRule("/posts", ".*", ROUTER(){
+	instance.registerRouteRule("/posts", ".*", ROUTER(request){
+		// Craft the posts body
 		string cont = R"(
 		<div class="post">
         	<a style="float: left;">%TITLE%</a>
@@ -92,10 +96,16 @@ int main(int argc, char* argv[]) {
 		if (entries.empty())
 			entries = u8"<div class=\"post\">这里似乎没有内容</div>";
 
-		return filetemplate(L"./html/show_entries.html", { { "%TITLE%", "Posts" }, { "%BODY%", entries } });
+		// Get the username
+		string nav = "<a href=\"/login\">Login</a>";
+		if (string cookie = decodeCookieSequence(request.GetHeaderValue("Cookie"))["id"]; !cookie.empty())
+			if (string username = db.getCookieUsername(cookie); !username.empty())
+				nav = "Logged in: " + username;
+
+		return filetemplate(L"./html/show_entries.html", { { "%TITLE%", "Posts" }, { "%BODY%", entries }, { "%NAV%", nav } });
 	});
 
-	instance.start();
+	instance.start(Instance::Config{ true, 5000, 5443, L"./ssl/127.0.0.1.cer", L"./ssl/127.0.0.1.key" });
 
 	cin.ignore(10000, '\n');
 

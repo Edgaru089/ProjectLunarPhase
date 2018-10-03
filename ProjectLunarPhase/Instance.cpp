@@ -16,9 +16,9 @@ namespace {
 			this_thread::sleep_for(chrono::milliseconds(75));
 		if ((socket->LocalHasShutdown() || socket->RemoteHasShutdown()) && socket->BytesToReceive() == 0)
 			throw DisconnectedException();
-//#ifndef DISABLE_ALL_LOGS
-//		putchar(c);
-//#endif
+		//#ifndef DISABLE_ALL_LOGS
+		//		putchar(c);
+		//#endif
 		return c;
 	}
 
@@ -32,8 +32,20 @@ void Instance::start(Instance::Config&& conf) {
 	portHTTPS = conf.portHTTPS;
 
 	if (useHTTPS) {
-		cert = TlsCertificate::Create(conf.cert);
-		key = TlsKey::Create(conf.key, conf.keypass);
+		cert = nullptr;
+		key = nullptr;
+		if (string str = readFileBinary(conf.cert); !str.empty())
+			cert = TlsCertificate::Create(str);
+		if (string str = readFileBinary(conf.key); !str.empty())
+			key = TlsKey::Create(str, conf.keypass);
+		if (!cert)
+			mlog << Log::Error << "Certificate loading failed! Filename: " << conf.cert << dlog;
+		if (!key)
+			mlog << Log::Error << "Certificate private key loading failed! Filename: " << conf.key << dlog;
+		if (!cert || !key) {
+			useHTTPS = false;
+			mlog << Log::Error << "HTTPS Listening Turned Off" << dlog;
+		}
 	}
 
 	running = true;
@@ -46,7 +58,7 @@ void Instance::start(Instance::Config&& conf) {
 
 void Instance::stop() {
 	running = false;
-	for (auto&&[connection, handler] : sockets) {
+	for (auto&[connection, handler] : sockets) {
 		connection->Shutdown();
 		if (handler->joinable())
 			handler->join();
@@ -94,9 +106,8 @@ void Instance::_HTTPListener() {
 			queueLock.lock();
 			sockets.emplace_back(socket,
 								 make_shared<thread>(&Instance::_connectionHandler, this, socket));
+			mloge << "HTTP Connected: " << ansiToWstring((string)socket->GetRemoteEndpoint().GetAddress()) << ":" << socket->GetRemoteEndpoint().GetPort() << dlog;
 			queueLock.unlock();
-
-			mloge << "Connected: " << ansiToWstring((string)socket->GetRemoteEndpoint().GetAddress()) << ":" << socket->GetRemoteEndpoint().GetPort() << dlog;
 		}
 
 		this_thread::sleep_for(chrono::milliseconds(200));
@@ -126,6 +137,7 @@ void Instance::_HTTPSListener() {
 			queueLock.lock();
 			sockets.emplace_back(connection,
 								 make_shared<thread>(&Instance::_connectionHandler, this, connection));
+			mloge << "HTTPS Connected: " << ansiToWstring((string)connection->GetRemoteEndpoint().GetAddress()) << ":" << connection->GetRemoteEndpoint().GetPort() << dlog;
 			queueLock.unlock();
 		}
 

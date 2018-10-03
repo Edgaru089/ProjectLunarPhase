@@ -2,7 +2,15 @@
 #include "Main.hpp"
 
 
+const char projectName[] = "Project LunarPhase", stage[] = "Alpha";
+const int majorVersion = 0, minorVersion = 0, patchVersion = 0;
+
+const char completeServerName[] = "Project-LunarPhase/0.0.0.Alpha";
+
+
 namespace {
+
+	mt19937 randomEngine((random_device())());
 
 	char decodeHex2(char high, char low) {
 		return (unsigned char)((((high >= 'A') ? (high - 'A' + 10) : (high - '0')) << 4) | ((low >= 'A') ? (low - 'A' + 10) : (low - '0')));
@@ -15,6 +23,15 @@ namespace {
 	pair<char, char> encodeHex2(unsigned char c) {
 		return make_pair(encodeHex1((c & 0xf0) >> 4),
 						 encodeHex1(c & 0xf));
+	}
+
+	double rand01() {
+		return uniform_real_distribution<double>(0.0, 1.0)(randomEngine);
+	}
+
+	// [x, y]
+	int rand(int x, int y) {
+		return uniform_int_distribution<int>(x, y)(randomEngine);
 	}
 
 }
@@ -75,8 +92,8 @@ string encodePercent(const string& source, bool encodeSlash) {
 	return res;
 }
 
-vector<pair<string, string>> decodeFormUrlEncoded(string body) {
-	vector<pair<string, string>> ans;
+map<string, string> decodeFormUrlEncoded(string body) {
+	map<string, string> ans;
 
 	int i = 0;
 	while (i < body.size()) {
@@ -87,9 +104,38 @@ vector<pair<string, string>> decodeFormUrlEncoded(string body) {
 		while (body[i] == '=') i++;
 		while (i < body.size() && body[i] != '&')
 			cur.second.push_back(body[i++]);
-		ans.push_back(make_pair(decodePercentEncoding(cur.first), decodePercentEncoding(cur.second)));
+		ans.insert(make_pair(decodePercentEncoding(cur.first), decodePercentEncoding(cur.second)));
 	}
 
+	return ans;
+}
+
+string encodeCookieSequence(const vector<pair<string, string>>& cookies) {
+	string ans;
+	for (auto&[id, body] : cookies) {
+		if (!ans.empty())
+			ans += "; ";
+		ans += id + '=' + body;
+	}
+	return ans;
+}
+
+map<string, string> decodeCookieSequence(string body) {
+	map<string, string> ans;
+
+	int i = 0;
+	while (i < body.size()) {
+		pair<string, string> cur;
+		while (body[i] == ';') i++;
+		while (body[i] == ' ') i++;
+		while (body[i] != '=')
+			cur.first.push_back(body[i++]);
+		while (body[i] == '=') i++;
+		while (i < body.size() && body[i] != ';')
+			cur.second.push_back(body[i++]);
+		ans.insert(make_pair(decodePercentEncoding(cur.first), decodePercentEncoding(cur.second)));
+	}
+	
 	return ans;
 }
 
@@ -116,3 +162,14 @@ string toUppercase(const string& str) {
 	return ans;
 }
 
+string generateCookie(int length) {
+	string str;
+	str.reserve(length);
+	for (int i = 1; i <= length; i++) {
+		if (rand(0, 1)) // Uppercase
+			str.push_back('A' + rand(0, 25));
+		else // Lowercase
+			str.push_back('a' + rand(0, 25));
+	}
+	return str;
+}

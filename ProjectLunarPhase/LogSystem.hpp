@@ -36,14 +36,16 @@ public:
 	void log(const wstring& content, LogLevel level = Info) {
 		if (level <= ignoreLevel) return;
 		time_t curtime = time(NULL);
-		wchar_t buffer[64];
+		wchar_t buffer[64] = {};
 		wcsftime(buffer, 63, L"[%T", localtime(&curtime));
-		wstring final = wstring(buffer) + L" " + logLevelName[level] + L"]: " + content;
+		wstring final = wstring(buffer) + L" " + logLevelName[level] + L"] " + content + L'\n';
 		lock.lock();
 		buffers.push_back(final);
 		for (wostream* i : out) {
-			(*i) << final << '\n';
+			(*i) << final;
 			i->flush();
+			if (!(*i))
+				i->clear();
 		}
 		for (const auto& i : outf)
 			i(final);
@@ -61,15 +63,15 @@ public:
 		log(content, level);
 	}
 
-	void addOutputStream(wostream& output) { out.push_back(&output); }
-	void addOutputStream(wostream* output) { out.push_back(output); }
-	void addOutputHandler(function<void(const wstring&)> output) { outf.push_back(output); }
+	void addOutputStream(wostream& output) { lock.lock(); out.push_back(&output); lock.unlock(); }
+	void addOutputStream(wostream* output) { lock.lock(); out.push_back(output); lock.unlock(); }
+	void addOutputHandler(function<void(const wstring&)> output) { lock.lock(); outf.push_back(output); lock.unlock(); }
 
 	// Lower and equal; use -1 to ignore nothing
 	void ignore(int level) { ignoreLevel = level; }
 	int getIgnoreLevel() { return ignoreLevel; }
 
-	const vector<wstring>& getBuffers() { AUTOLOCK(lock); return buffers; }
+	const vector<wstring>& getBuffers() { return buffers; }
 	void clearBuffer() { AUTOLOCK(lock); buffers.clear(); }
 
 private:
@@ -120,6 +122,10 @@ private:
 	Log::LogLevel level;
 };
 
+#define mlog LogMessage()
+#define mloge LogMessage(Log::Event)
+#define mlogd LogMessage(Log::Debug)
+
 #else
 
 class Log {
@@ -148,29 +154,27 @@ public:
 	void clearBuffer() {}
 };
 
-Log dlog;
-
 class LogMessage {
 public:
 	LogMessage() {}
 	LogMessage(Log::LogLevel level) {}
 	LogMessage& operator <<(bool) { return *this; }
-	LogMessage& operator <<(char)  { return *this; }
-	LogMessage& operator <<(unsigned char)  { return *this; }
-	LogMessage& operator <<(short)  { return *this; }
-	LogMessage& operator <<(unsigned short)  { return *this; }
-	LogMessage& operator <<(int)  { return *this; }
-	LogMessage& operator <<(unsigned int)  { return *this; }
-	LogMessage& operator <<(long long)  { return *this; }
-	LogMessage& operator <<(unsigned long long)  { return *this; }
-	LogMessage& operator <<(float)  { return *this; }
-	LogMessage& operator <<(double)  { return *this; }
-	LogMessage& operator <<(const wchar_t*)  { return *this; }
-	LogMessage& operator <<(const char*)  { return *this; }
-	LogMessage& operator <<(const wstring&)  { return *this; }
-	LogMessage& operator <<(const string&)  { return *this; }
-	LogMessage& operator <<(Log::LogLevel)  { return *this; }
-	LogMessage& operator <<(Log&)  { return *this; }
+	LogMessage& operator <<(char) { return *this; }
+	LogMessage& operator <<(unsigned char) { return *this; }
+	LogMessage& operator <<(short) { return *this; }
+	LogMessage& operator <<(unsigned short) { return *this; }
+	LogMessage& operator <<(int) { return *this; }
+	LogMessage& operator <<(unsigned int) { return *this; }
+	LogMessage& operator <<(long long) { return *this; }
+	LogMessage& operator <<(unsigned long long) { return *this; }
+	LogMessage& operator <<(float) { return *this; }
+	LogMessage& operator <<(double) { return *this; }
+	LogMessage& operator <<(const wchar_t*) { return *this; }
+	LogMessage& operator <<(const char*) { return *this; }
+	LogMessage& operator <<(const wstring&) { return *this; }
+	LogMessage& operator <<(const string&) { return *this; }
+	LogMessage& operator <<(Log::LogLevel) { return *this; }
+	LogMessage& operator <<(Log&) { return *this; }
 public:
 	void setLevel(Log::LogLevel) {}
 	void flush(Log&) {}
@@ -178,8 +182,23 @@ public:
 	void clear() {}
 };
 
-#endif
+#ifdef USE_WCOUT_AS_LOG
+
+#define mlog (wcout << L"[INFO] ")
+#define mloge (wcout << L"[EVENT] ")
+#define mlogd (wcout << L"DEBUG ")
+#define dlog endl
+
+inline wostream& operator << (wostream& out, const string& str) { out << utf8ToWstring(str); return out; }
+
+#else
+
+extern Log dlog;
 
 #define mlog LogMessage()
 #define mloge LogMessage(Log::Event)
 #define mlogd LogMessage(Log::Debug)
+
+#endif
+
+#endif

@@ -11,16 +11,23 @@ class StringParser {
 public:
 
 	template<typename... Args>
-	static const string toStringF(string format, Args... args) {
+	static const string toStringF(const string& format, Args... args) {
 		char buffer[8192];
 		sprintf(buffer, format.c_str(), args...);
 		return string(buffer);
 	}
+	template<typename... Args>
+	static const wstring toStringFW(const wstring& format, Args... args) {
+		wchar_t buffer[8192];
+		wsprintf(buffer, format.c_str(), args...);
+		return wstring(buffer);
+	}
 
-	static const string replaceSubString(string source, const vector<pair<string, string>>& replace) {
-		string dest;
+	template<typename Char = char>
+	static const basic_string<Char> replaceSubStringX(basic_string<Char> source, const vector<pair<basic_string<Char>, basic_string<Char>>>& replaces) {
+		basic_string<Char> dest;
 
-		for (auto&&[target, replaced] : replace) {
+		for (auto&&[target, replaced] : replaces) {
 			dest.clear();
 			for (int j = 0; j < source.size();) {
 				if (source.substr(j, target.size()) == target) {
@@ -36,6 +43,9 @@ public:
 		}
 		return source;
 	}
+
+	static const string replaceSubString(const string& source, const vector<pair<string, string>>& replaces) { return replaceSubStringX<char>(source, replaces); }
+	static const wstring replaceSubStringW(const wstring& source, const vector<pair<wstring, wstring>>& replaces) { return replaceSubStringX<wchar_t>(source, replaces); }
 
 	template<typename Type>
 	const Type toValue(const string& data) { return Type(); }

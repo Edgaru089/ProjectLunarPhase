@@ -155,6 +155,7 @@ void HTTPResponseRedirection::send(TcpSocket::Ptr socket) {
 		"Content-Type: text/html\r\n"
 		"Connection: keep-alive\r\n"
 		"Location: %LOC%\r\n"
+		"%COOKIE%"
 		"Content-Length: %LEN%\r\n\r\n",
 		body[] =
 		"<html>\r\n"
@@ -168,7 +169,9 @@ void HTTPResponseRedirection::send(TcpSocket::Ptr socket) {
 	string realBody = StringParser::replaceSubString(body, {
 		{ "%STR%", to_string(code) + ' ' + responses.get(code) } });
 	string realHeader = StringParser::replaceSubString(header, {
-		{ "%STR%", to_string(code) + ' ' + responses.get(code) }, { "%LOC%", encodePercent(target) }, { "%LEN%", to_string(realBody.size()) } });
+		{ "%STR%", to_string(code) + ' ' + responses.get(code) }
+		, { "%LOC%", encodePercent(target) }, { "%LEN%", to_string(realBody.size()) }
+	, { "%COOKIE%", cookies.empty() ? "" : ("Set-Cookie: " + encodeCookieSequence(cookies) + "\r\n") } });
 
 	// Send the header and the body (without closing the connection)
 	socket->Send(realHeader.data(), realHeader.length());
@@ -180,26 +183,4 @@ void setFrameFile(const wstring& filename, const string& bodyFlag) {
 	frameFileContents = readFileBinary(filename);
 	frameBodyFlag = bodyFlag;
 }
-
-
-HTTPResponseWrapper::Ptr htmltext(const string& str, bool hasFrame, const vector<pair<string, string>>& replaces)
-{ return make_shared<HTTPResponseShort>(str, hasFrame, replaces); }
-HTTPResponseWrapper::Ptr htmltext(const wstring& str, bool hasFrame, const vector<pair<string, string>>& replaces)
-{ return make_shared<HTTPResponseShort>(str, hasFrame, replaces); }
-
-HTTPResponseWrapper::Ptr file(const wstring& filename, const string& mimeType)
-{ return make_shared<HTTPResponseFile>(filename, mimeType); }
-HTTPResponseWrapper::Ptr file(const string& filename, const string& mimeType)
-{ return make_shared<HTTPResponseFile>(utf8ToWstring(filename), mimeType); }
-
-HTTPResponseWrapper::Ptr filetemplate(const wstring& filename, const vector<pair<string, string>>& replaces, bool hasFrame, const string& mimeType)
-{ return make_shared<HTTPResponseTemplate>(filename, replaces, hasFrame, mimeType); }
-HTTPResponseWrapper::Ptr filetemplate(const string& filename, const vector<pair<string, string>>& replaces, bool hasFrame, const string& mimeType)
-{ return make_shared<HTTPResponseTemplate>(utf8ToWstring(filename), replaces, hasFrame, mimeType); }
-
-HTTPResponseWrapper::Ptr error(int code) { return make_shared<HTTPResponseError>(code); }
-
-// Code is either 301 Moved Permanently or 302 Found
-HTTPResponseWrapper::Ptr redirect(const wstring& target, int code) { return make_shared<HTTPResponseRedirection>(wstringToUtf8(target), code); }
-HTTPResponseWrapper::Ptr redirect(const string& target, int code) { return make_shared<HTTPResponseRedirection>(target, code); }
 

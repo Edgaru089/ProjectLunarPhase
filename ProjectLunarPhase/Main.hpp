@@ -16,6 +16,8 @@
 #include <mutex>
 #include <regex>
 #include <chrono>
+#include <random>
+#include <map>
 #include <SFNUL.hpp>
 
 #ifdef _WIN32
@@ -39,12 +41,17 @@ wstring ansiToWstring(const string& source, size_t bufferSize = 16384);
 
 string decodePercentEncoding(const string& source);
 string encodePercent(const string& source, bool encodeSlash = false);
-vector<pair<string, string>> decodeFormUrlEncoded(string body);
+map<string, string> decodeFormUrlEncoded(string body);
+string encodeCookieSequence(const vector<pair<string, string>>& cookies);
+map<string, string> decodeCookieSequence(string body);
 
 string readFileBinary(const wstring& filename);
 
 string toUppercase(const string& str);
 
+string generateCookie(int length = 24);
+
 //#define DISABLE_ALL_LOGS
+//#define USE_WCOUT_AS_LOG
 #include "LogSystem.hpp"
 

@@ -24,12 +24,13 @@ public:
 		// Port the HTTPS server will be listening
 		Uint16 portHTTPS = 5443;
 
-		// String containing the contents of the Base 64 DER encoded certificate
-		string cert = string();
+		// Filename of the Base 64 DER encoded certificate
+		wstring cert = wstring();
 
-		// String containing the raw contents of the PKCS8 private key file
+		// Filename of the PKCS8 private key file
 		// and the optional password
-		string key = string(), keypass = string();
+		wstring key = wstring();
+		string keypass = string();
 	};
 
 	// The function will return instantly, leaving worker

@@ -52,7 +52,7 @@ class HTTPResponseShort :public HTTPResponseWrapper {
 public:
 	HTTPResponseShort() {}
 	HTTPResponseShort(const wstring& body, bool hasFrame = true, const vector<pair<string, string>>& replaces = {})
-		:hasFrame(hasFrame),replaces(replaces) {
+		:hasFrame(hasFrame), replaces(replaces) {
 		SetBody(wstringToUtf8(body));
 	}
 	HTTPResponseShort(const string& body, bool hasFrame = true, const vector<pair<string, string>>& replaces = {})
@@ -131,7 +131,8 @@ public:
 
 	HTTPResponseRedirection() {}
 	// Code is either 301 Moved Permanently or 302 Found
-	HTTPResponseRedirection(const string& target, int code = 301) { this->target = target; this->code = code; }
+	HTTPResponseRedirection(const string& target, int code = 301, const vector<pair<string, string>>& cookies = {}) :
+		target(target), cookies(cookies), code(code) {}
 
 	string what() const override { return "HTTP Redirection " + to_string(code) + ' ' + responses.get(code) + "\r\nLocation: " + target; }
 
@@ -139,24 +140,30 @@ public:
 
 private:
 	string target;
+	vector<pair<string, string>> cookies;
 	int code;
 };
 
 void setFrameFile(const wstring& filename, const string& bodyFlag = "%BODY%");
 
-HTTPResponseWrapper::Ptr htmltext(const wstring& str, bool hasFrame = true, const vector<pair<string, string>>& replaces = {});
-HTTPResponseWrapper::Ptr htmltext(const string& str, bool hasFrame = true, const vector<pair<string, string>>& replaces = {});
+inline HTTPResponseWrapper::Ptr htmltext(const wstring& str, bool hasFrame = true, const vector<pair<string, string>>& replaces = {})
+{ return make_shared<HTTPResponseShort>(str, hasFrame, replaces); }
+inline HTTPResponseWrapper::Ptr htmltext(const string& str, bool hasFrame = true, const vector<pair<string, string>>& replaces = {})
+{ return make_shared<HTTPResponseShort>(str, hasFrame, replaces); }
 
-HTTPResponseWrapper::Ptr file(const wstring& filename, const string& mimeType = "application/octet-stream");
-HTTPResponseWrapper::Ptr file(const string& filename, const string& mimeType = "application/octet-stream");
+inline HTTPResponseWrapper::Ptr file(const wstring& filename, const string& mimeType = "application/octet-stream")
+{ return make_shared<HTTPResponseFile>(filename, mimeType); }
+inline HTTPResponseWrapper::Ptr file(const string& filename, const string& mimeType = "application/octet-stream")
+{ return make_shared<HTTPResponseFile>(utf8ToWstring(filename), mimeType); }
 
-HTTPResponseWrapper::Ptr filetemplate(const wstring& filename, const vector<pair<string, string>>& replaces = {}, bool hasFrame = true, const string& mimeType = "text/html");
-HTTPResponseWrapper::Ptr filetemplate(const string& filename, const vector<pair<string, string>>& replaces = {}, bool hasFrame = true, const string& mimeType = "text/html");
+inline HTTPResponseWrapper::Ptr filetemplate(const wstring& filename, const vector<pair<string, string>>& replaces = {}, bool hasFrame = true, const string& mimeType = "text/html")
+{ return make_shared<HTTPResponseTemplate>(filename, replaces, hasFrame, mimeType); }
+inline HTTPResponseWrapper::Ptr filetemplate(const string& filename, const vector<pair<string, string>>& replaces = {}, bool hasFrame = true, const string& mimeType = "text/html")
+{ return make_shared<HTTPResponseTemplate>(utf8ToWstring(filename), replaces, hasFrame, mimeType); }
 
-HTTPResponseWrapper::Ptr error(int code);
+inline HTTPResponseWrapper::Ptr error(int code) { return make_shared<HTTPResponseError>(code); }
 
 // Code is either 301 Moved Permanently or 302 Found
-HTTPResponseWrapper::Ptr redirect(const wstring& target, int code = 301);
-HTTPResponseWrapper::Ptr redirect(const string& target, int code = 301);
-
+inline HTTPResponseWrapper::Ptr redirect(const wstring& target, int code = 301, const vector<pair<string, string>>& cookies = {}) { return make_shared<HTTPResponseRedirection>(wstringToUtf8(target), code, cookies); }
+inline HTTPResponseWrapper::Ptr redirect(const string& target, int code = 301, const vector<pair<string, string>>& cookies = {}) { return make_shared<HTTPResponseRedirection>(target, code, cookies); }
 
