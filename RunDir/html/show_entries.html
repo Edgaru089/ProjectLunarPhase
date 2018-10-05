@@ -5,18 +5,10 @@
 		</div>
 
 		%BODY%
+		
+		<hr style="color: rgba(0,0,0,.2);" />
 
-		<form class="entry" action="/share" method="POST">
-			<dl>
-				<dt>Username:
-				<dd><input type=text size=30 name=username>
-				<dt>Title:
-				<dd><input type=text size=30 name=title>
-				<dt>Text:
-				<dd><textarea name=body rows=5 cols=40></textarea>
-				<dd><input type=submit value=Share>
-			</dl>
-		</form>
+		%POST%
 
 		<ul class="entries">
 			<li><h1>任务一</h1>制作一个登录页面</li>

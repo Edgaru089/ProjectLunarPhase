@@ -2,13 +2,22 @@
 /* CSS Document */
 
 body {/*
-	background-image: url("/static/1619105875.jpg");
+	background-image: url("/static/1272106-2x.png");
 	background-attachment: fixed;
 	background-size: cover;*/
 	background-color: #000;
 	
 	color: #000;
 	font-family: "Courier New", "Courier 10 Pitch", serif;
+}
+
+input {
+	padding: 3px;
+}
+
+textarea {
+	padding: 6px;
+	resize: none;
 }
 
 .container {

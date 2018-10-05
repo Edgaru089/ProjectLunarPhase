@@ -26,6 +26,7 @@ namespace {
 
 
 void Instance::start(Instance::Config&& conf) {
+	mlog << "Server Starting..." << dlog;
 
 	useHTTPS = conf.useHTTPS;
 	port = conf.port;
@@ -42,11 +43,14 @@ void Instance::start(Instance::Config&& conf) {
 			mlog << Log::Error << "Certificate loading failed! Filename: " << conf.cert << dlog;
 		if (!key)
 			mlog << Log::Error << "Certificate private key loading failed! Filename: " << conf.key << dlog;
-		if (!cert || !key) {
+		if (!cert || !key)
 			useHTTPS = false;
-			mlog << Log::Error << "HTTPS Listening Turned Off" << dlog;
-		}
 	}
+
+	if (useHTTPS)
+		mlog << "HTTP Port: " << port << ", HTTPS Port: " << portHTTPS << '\n' << dlog;
+	else
+		mlog << "HTTP Port: " << port << ", HTTPS Turned Off" << '\n' << dlog;
 
 	running = true;
 
@@ -57,6 +61,7 @@ void Instance::start(Instance::Config&& conf) {
 
 
 void Instance::stop() {
+	mlog << "Stopping..." << dlog;
 	running = false;
 	for (auto&[connection, handler] : sockets) {
 		connection->Shutdown();
@@ -71,6 +76,7 @@ void Instance::stop() {
 
 	sockets.clear();
 	httpListener = httpsListener = nullptr;
+	mlog << "Server Stopped" << dlog;
 }
 
 

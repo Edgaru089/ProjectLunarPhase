@@ -7,31 +7,14 @@
 class DatabaseHandler {
 public:
 
-	DatabaseHandler() :mysql(nullptr) {}
-
-	void connect(string&& hostname = "localhost",
-				 Uint16 port = 3306,
-				 string&& username = "bndsdb",
-				 string&& password = "bnds-db-admin-ScienceAndTechnolgy",
-				 string&& databaseName = "bndsdb") {
-		mysql = make_shared<MySql>(hostname.c_str(), username.c_str(), password.c_str(), databaseName.c_str(), port);
-		_prepareStatements();
+	DatabaseHandler(const char* hostname = "localhost",
+					Uint16 port = 3306,
+					const char* username = "bndsdb",
+					const char* password = "bnds-db-admin-ScienceAndTechnolgy",
+					const char* databaseName = "bndsdb") :mysql(hostname, username, password, databaseName, port) {
+		// Set UTF-8 Encoding
+		mysql.runCommand("SET NAMES 'utf8';");
 	}
-
-	void ensureConnected(string&& hostname = "localhost",
-						 Uint16 port = 3306,
-						 string&& username = "bndsdb",
-						 string&& password = "bnds-db-admin-ScienceAndTechnolgy",
-						 string&& databaseName = "bndsdb") {
-		if (!mysql) {
-			mysql = make_shared<MySql>(hostname.c_str(), username.c_str(), password.c_str(), databaseName.c_str(), port);
-			_prepareStatements();
-		}
-	}
-
-	bool connected() { return (bool)mysql; }
-	void disconnect() { mysql = nullptr; }
-
 
 	struct User {
 		int id = 0;
@@ -52,7 +35,7 @@ public:
 	typedef vector<tuple<int, string, string, string>> UserVectorTuple;
 	User getUser(string username) {
 		UserVectorTuple q;
-		mysql->runQuery(&q, "SELECT * FROM `users` WHERE `username` = ?;", username);
+		mysql.runQuery(&q, "SELECT * FROM `users` WHERE `username` = ?;", username);
 		if (q.size() != 1)
 			return User{};
 		else {
@@ -64,12 +47,12 @@ public:
 	void addUser(string username, string password) {
 		if (getUser(username) != User{})
 			return;
-		mysql->runCommand("INSERT INTO `users` (`id`, `username`, `password`, `cursession`) VALUES (?, ?, ?, ?)", 0, username, password, ""s);
+		mysql.runCommand("INSERT INTO `users` (`id`, `username`, `password`, `cursession`) VALUES (?, ?, ?, ?)", 0, username, password, ""s);
 	}
 
 	bool verifyUser(string username, string password) {
 		vector<tuple<string>> q;
-		mysql->runQuery(&q, "SELECT `password` FROM `users` WHERE `username` = ?;", username);
+		mysql.runQuery(&q, "SELECT `password` FROM `users` WHERE `username` = ?;", username);
 		if (q.size() != 1 || get<0>(q[0]) != password)
 			return false;
 		else
@@ -78,7 +61,7 @@ public:
 
 	void addPost(const string& username, const string& title, const string& contents) {
 		//mysql->runCommand(*insertPost, 0, username, title, contents);
-		mysql->runCommand("INSERT INTO `posts` (`id`, `username`, `title`, `body`) VALUES (?, ?, ?, ?);", 0, username, title, contents);
+		mysql.runCommand("INSERT INTO `posts` (`id`, `username`, `title`, `body`) VALUES (?, ?, ?, ?);", 0, username, title, contents);
 	}
 
 	// id, username, title, body
@@ -88,7 +71,7 @@ public:
 			try {
 				cachedPosts.clear();
 				//mysql->runQuery(&cachedPosts, *listPosts);
-				mysql->runQuery(&cachedPosts, "SELECT * FROM `posts`;");
+				mysql.runQuery(&cachedPosts, "SELECT * FROM `posts`;");
 				mlog << "Database.GetPosts(): Queried size: " << cachedPosts.size() << dlog;
 				return cachedPosts;
 			}
@@ -100,12 +83,12 @@ public:
 	}
 
 	void setUserCookie(const string& username, const string& cookie) {
-		mysql->runCommand("UPDATE `users` SET `cursession` = ? WHERE `users`.`username` = ?;", cookie, username);
+		mysql.runCommand("UPDATE `users` SET `cursession` = ? WHERE `users`.`username` = ?;", cookie, username);
 	}
 
 	string getCookieUsername(const string& cookie) {
 		vector<tuple<string>> q;
-		mysql->runQuery(&q, "SELECT `username` FROM `users` WHERE `cursession` = ?;", cookie);
+		mysql.runQuery(&q, "SELECT `username` FROM `users` WHERE `cursession` = ?;", cookie);
 		if (q.size() != 1)
 			return "";
 		else
@@ -114,24 +97,11 @@ public:
 
 private:
 
-	void _prepareStatements() {
-		try {
-			// Set UTF-8 Encoding
-			mysql->runCommand("SET NAMES 'utf8';");
-			insertPost = make_shared<MySqlPreparedStatement>(mysql->prepareStatement("INSERT INTO `posts` (`id`, `username`, `title`, `body`) VALUES (?, ?, ?, ?);"));
-			listPosts = make_shared<MySqlPreparedStatement>(mysql->prepareStatement("SELECT * FROM `posts`;"));
-		}
-		catch (MySqlException e) {
-			mlog << Log::Error << "There is a database exception: " << e.what() << dlog;
-		}
-	}
-
-	shared_ptr<MySql> mysql;
-	shared_ptr<MySqlPreparedStatement> insertPost, listPosts;
+	MySql mysql;
 
 	PostVectorTuple cachedPosts;
 	chrono::steady_clock::time_point cachedPostTime;
-	const chrono::seconds recachePostDuartion = chrono::seconds(1);
+	const chrono::seconds recachePostDuartion = chrono::seconds(2);
 
 
 };

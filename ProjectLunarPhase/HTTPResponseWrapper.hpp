@@ -11,6 +11,8 @@ public:
 
 		strings.insert(make_pair(301, "Moved Permanently"));
 		strings.insert(make_pair(302, "Found"));
+		strings.insert(make_pair(303, "See Other"));
+		strings.insert(make_pair(307, "Temporary Redirect"));
 
 		strings.insert(make_pair(400, "Bad Request"));
 		strings.insert(make_pair(401, "Unauthorized"));
@@ -163,7 +165,10 @@ inline HTTPResponseWrapper::Ptr filetemplate(const string& filename, const vecto
 
 inline HTTPResponseWrapper::Ptr error(int code) { return make_shared<HTTPResponseError>(code); }
 
-// Code is either 301 Moved Permanently or 302 Found
+// Code is one of 301 Moved Permanently, 302 Found, 303 See Other and 307 Temporary Redirect
+// std::string sequence is encoded in UTF-8
+// Note that when encoding an cookie, encodePercent is not used, i.e.,
+// one cannot use any speical symbols and Unicode characters
 inline HTTPResponseWrapper::Ptr redirect(const wstring& target, int code = 301, const vector<pair<string, string>>& cookies = {}) { return make_shared<HTTPResponseRedirection>(wstringToUtf8(target), code, cookies); }
 inline HTTPResponseWrapper::Ptr redirect(const string& target, int code = 301, const vector<pair<string, string>>& cookies = {}) { return make_shared<HTTPResponseRedirection>(target, code, cookies); }
 

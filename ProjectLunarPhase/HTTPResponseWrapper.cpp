@@ -81,24 +81,14 @@ void HTTPResponseFile::send(TcpSocket::Ptr socket) {
 }
 
 void HTTPResponseTemplate::send(TcpSocket::Ptr socket) {
-	file.open(filename, ifstream::in);
+	// As a template, we have to read all of the file
+	string body = readFileBinary(filename);
 
-	// Return 404 Not Found if the stream was not opened
-	if (!file) {
-		file.close();
+	// Return 404 Not Found if the file isn't valid
+	if (body.empty()) {
 		HTTPResponseError(404).send(socket);
 		return;
 	}
-
-	// Tell the size of the file
-	file.ignore(numeric_limits<streamsize>::max());
-	size_t fileSize = (size_t)file.gcount();
-	file.seekg(0, ifstream::beg);
-	mlog << "Template Filename: " << filename << ", Size: " << fileSize << dlog;
-
-	// As a template, we have to read all of the file
-	string body(fileSize, '\0');
-	file.read(body.data(), fileSize);
 
 	// Process the tempate
 	// TODO This is quite a dumb heuristic; try implementing a new one?
@@ -119,8 +109,6 @@ void HTTPResponseTemplate::send(TcpSocket::Ptr socket) {
 	// Send the header and body
 	string data = ToString();
 	socket->Send(data.data(), data.length());
-
-	file.close();
 }
 
 

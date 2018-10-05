@@ -34,6 +34,9 @@ namespace {
 		return uniform_int_distribution<int>(x, y)(randomEngine);
 	}
 
+	// A cache container for readFileBinary
+	map<wstring, pair<chrono::steady_clock::time_point, string>> fileCache;
+	const auto reloadCachedFileDuration = chrono::seconds(3);
 }
 
 #ifdef _WIN32
@@ -135,20 +138,31 @@ map<string, string> decodeCookieSequence(string body) {
 			cur.second.push_back(body[i++]);
 		ans.insert(make_pair(decodePercentEncoding(cur.first), decodePercentEncoding(cur.second)));
 	}
-	
+
 	return ans;
 }
 
 string readFileBinary(const wstring& filename) {
-	ifstream file(filename);
-	if (!file)
-		return string();
-	file.ignore(numeric_limits<streamsize>::max());
-	size_t fileSize = (size_t)file.gcount();
-	file.seekg(0, ifstream::beg);
-	string res(fileSize, '\0');
-	file.read(res.data(), fileSize);
-	return res;
+	auto i = fileCache.find(filename);
+	if (i == fileCache.end() || chrono::steady_clock::now() - i->second.first > reloadCachedFileDuration) {
+		// Load or reload the file
+		if (i == fileCache.end())
+			i = fileCache.insert(make_pair(filename, make_pair(chrono::steady_clock::now(), ""))).first;
+
+		ifstream file(filename);
+		if (!file)
+			return string();
+
+		// Get the file size
+		file.ignore(numeric_limits<streamsize>::max());
+		size_t fileSize = (size_t)file.gcount();
+		file.seekg(0, ifstream::beg);
+
+		string& res = i->second.second;
+		res.clear(); res.resize(fileSize); res.shrink_to_fit();
+		file.read(res.data(), fileSize);
+	}
+	return i->second.second;
 }
 
 string toUppercase(const string& str) {

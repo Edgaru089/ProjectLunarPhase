@@ -12,7 +12,6 @@ int main(int argc, char* argv[]) {
 	dlog.addOutputStream(wcout);
 
 	//MySql mysql("localhost","bndsdb","bnds-db-admin-ScienceAndTechnolgy");
-	db.connect();
 
 	Start(8);
 
@@ -21,11 +20,7 @@ int main(int argc, char* argv[]) {
 	setFrameFile(L"./html/frame.html");
 
 	instance.registerRouteRule("/", ".*", ROUTER(){
-		return redirect("/index");
-	});
-
-	instance.registerRouteRule("/index", ".*", ROUTER(){
-		return filetemplate("./html/show_entries.html", { { "%TITLE%", "Index" } });
+		return redirect("/posts");
 	});
 
 	instance.registerRouteRule("/static/.*", ".*", ROUTER(request){
@@ -38,7 +33,12 @@ int main(int argc, char* argv[]) {
 		return htmltext(body, true, { { "%TITLE%", "Kochiya Sanae" } });
 	});
 
-	instance.registerRouteRule("/login", ".*", ROUTER(){
+	instance.registerRouteRule("/login", ".*", ROUTER(request){
+		// Get the username, redirect if not empty
+		string username;
+		if (string cookie = decodeCookieSequence(request.GetHeaderValue("Cookie"))["id"]; !cookie.empty())
+			if (!(username = db.getCookieUsername(cookie)).empty())
+				return redirect("/posts", 303);
 		return filetemplate(L"./html/login.html", { { "%TITLE%", "Login" } });
 	});
 
@@ -49,12 +49,18 @@ int main(int argc, char* argv[]) {
 		if (db.verifyUser(instances["username"], instances["password"])) {
 			string cookie = generateCookie();
 			db.setUserCookie(instances["username"], cookie);
-			return redirect("/posts", 302, { { "id", cookie } });
+			return redirect("/posts", 303, { { "id", cookie } });
 		}
 		else
-			return redirect("/login", 302);
+			return redirect("/login", 303);
 
 	}, Instance::Post);
+
+	instance.registerRouteRule("/logout", ".*", ROUTER(request){
+		// Remove the id cookie by setting the expiry date in the past;
+		// See https://stackoverflow.com/questions/20320549/how-can-you-delete-a-cookie-in-an-http-response
+		return redirect("/posts", 303, { { "id", "deleted; Expires=Wed, 21 Oct 2015 07:28:00 GMT" } });
+	});
 
 	instance.registerRouteRule("/share", ".*", ROUTER(request){
 		if (request.GetHeaderValue("Content-Type") != "application/x-www-form-urlencoded")
@@ -74,19 +80,12 @@ int main(int argc, char* argv[]) {
 		if (!username.empty() && !title.empty() && !body.empty())
 			db.addPost(username, title, body);
 
-		return redirect("/posts", 302);
+		return redirect("/posts", 303);
 	}, Instance::Post);
 
 	instance.registerRouteRule("/posts", ".*", ROUTER(request){
 		// Craft the posts body
-		string cont = R"(
-		<div class="post">
-        	<a style="float: left;">%TITLE%</a>
-          <a style="float: right;">%USER%</a>
-            <br /><hr />
-            <a>%CONT%</a>
-        </div>
-)";
+		string cont = readFileBinary(L"./html/post_frame.html");
 		string entries;
 		auto posts = db.getPosts();
 		for (auto&&[id, username, title, body] : posts)
@@ -97,12 +96,19 @@ int main(int argc, char* argv[]) {
 			entries = u8"<div class=\"post\">这里似乎没有内容</div>";
 
 		// Get the username
-		string nav = "<a href=\"/login\">Login</a>";
+		string nav = "<a href=\"/login\">Login</a>", username;
 		if (string cookie = decodeCookieSequence(request.GetHeaderValue("Cookie"))["id"]; !cookie.empty())
-			if (string username = db.getCookieUsername(cookie); !username.empty())
-				nav = "Logged in: " + username;
+			if (!(username = db.getCookieUsername(cookie)).empty())
+				nav = "Logged in: " + username + " <a href=\"/logout\">Logout</a>";
 
-		return filetemplate(L"./html/show_entries.html", { { "%TITLE%", "Posts" }, { "%BODY%", entries }, { "%NAV%", nav } });
+		// Add the postnew frame
+		string postnew;
+		if (username.empty())
+			postnew = readFileBinary(L"./html/postnew_frame_empty.html");
+		else
+			postnew = StringParser::replaceSubString(readFileBinary(L"./html/postnew_frame.html"), { { "%USER%", username } });
+
+		return filetemplate(L"./html/show_entries.html", { { "%TITLE%", "Posts" }, { "%BODY%", entries }, { "%NAV%", nav }, { "%POST%", postnew } });
 	});
 
 	instance.start(Instance::Config{ true, 5000, 5443, L"./ssl/127.0.0.1.cer", L"./ssl/127.0.0.1.key" });
