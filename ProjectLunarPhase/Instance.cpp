@@ -35,9 +35,9 @@ void Instance::start(Instance::Config&& conf) {
 	if (useHTTPS) {
 		cert = nullptr;
 		key = nullptr;
-		if (string str = readFileBinary(conf.cert); !str.empty())
+		if (string str = readFileBinaryCached(conf.cert); !str.empty())
 			cert = TlsCertificate::Create(str);
-		if (string str = readFileBinary(conf.key); !str.empty())
+		if (string str = readFileBinaryCached(conf.key); !str.empty())
 			key = TlsKey::Create(str, conf.keypass);
 		if (!cert)
 			mlog << Log::Error << "Certificate loading failed! Filename: " << conf.cert << dlog;

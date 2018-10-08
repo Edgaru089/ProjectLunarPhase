@@ -46,6 +46,7 @@ string encodeCookieSequence(const vector<pair<string, string>>& cookies);
 map<string, string> decodeCookieSequence(string body);
 
 string readFileBinary(const wstring& filename);
+string readFileBinaryCached(const wstring& filename);
 
 string toUppercase(const string& str);
 

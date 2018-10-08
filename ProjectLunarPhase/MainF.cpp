@@ -34,7 +34,7 @@ namespace {
 		return uniform_int_distribution<int>(x, y)(randomEngine);
 	}
 
-	// A cache container for readFileBinary
+	// A cache container for readFileBinaryCached
 	map<wstring, pair<chrono::steady_clock::time_point, string>> fileCache;
 	const auto reloadCachedFileDuration = chrono::seconds(3);
 }
@@ -71,8 +71,7 @@ string decodePercentEncoding(const string& source) {
 			char c1 = source[i++];
 			char c2 = source[i++];
 			res.push_back(decodeHex2(c1, c2));
-		}
-		else if (source[i - 1] == '+')
+		} else if (source[i - 1] == '+')
 			res.push_back(' ');
 		else
 			res.push_back(source[i - 1]);
@@ -143,6 +142,22 @@ map<string, string> decodeCookieSequence(string body) {
 }
 
 string readFileBinary(const wstring& filename) {
+	ifstream file(filename);
+	if (!file)
+		return string();
+
+	// Get the file size
+	file.ignore(numeric_limits<streamsize>::max());
+	size_t fileSize = (size_t)file.gcount();
+	file.seekg(0, ifstream::beg);
+
+	// Read
+	string res(fileSize, '\0');
+	file.read(res.data(), fileSize);
+	return res;
+}
+
+string readFileBinaryCached(const wstring& filename) {
 	auto i = fileCache.find(filename);
 	if (i == fileCache.end() || chrono::steady_clock::now() - i->second.first > reloadCachedFileDuration) {
 		// Load or reload the file

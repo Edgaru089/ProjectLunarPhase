@@ -3,42 +3,31 @@
 #include "Main.hpp"
 
 
-class HTTPResponseCodeStrings {
+class HTTPStringData {
 public:
-	HTTPResponseCodeStrings() {
-		//TODO All responses
-		strings.insert(make_pair(200, "OK"));
+	HTTPStringData();
 
-		strings.insert(make_pair(301, "Moved Permanently"));
-		strings.insert(make_pair(302, "Found"));
-		strings.insert(make_pair(303, "See Other"));
-		strings.insert(make_pair(307, "Temporary Redirect"));
-
-		strings.insert(make_pair(400, "Bad Request"));
-		strings.insert(make_pair(401, "Unauthorized"));
-		strings.insert(make_pair(403, "Forbidden"));
-		strings.insert(make_pair(404, "Not Found"));
-		strings.insert(make_pair(408, "Request Timeout"));
-		strings.insert(make_pair(411, "Length Required"));
-
-		strings.insert(make_pair(500, "Internal Server Error"));
-		strings.insert(make_pair(503, "Service Unavailable"));
-		strings.insert(make_pair(505, "HTTP Version Not Supported"));
-	}
-
-	string get(int code) {
+	string getResponseString(int code) {
 		if (auto i = strings.find(code); i != strings.end())
 			return i->second;
 		else
 			return empty;
 	}
 
+	string getMIMEString(const string& str) {
+		if (auto i = mimes.find(str); i != mimes.end())
+			return i->second;
+		else
+			return "application/octet-stream";
+	}
+
 private:
 	map<int, string> strings;
+	map<string, string> mimes;
 	string empty;
 };
 
-extern HTTPResponseCodeStrings responses;
+extern HTTPStringData httpdata;
 
 
 
@@ -119,7 +108,7 @@ public:
 	HTTPResponseError() {}
 	HTTPResponseError(int code) { this->code = code; }
 
-	string what() const override { return "HTTP ERROR " + to_string(code) + ' ' + responses.get(code); }
+	string what() const override { return "HTTP ERROR " + to_string(code) + ' ' + httpdata.getResponseString(code); }
 
 	void send(TcpSocket::Ptr socket) override;
 
@@ -136,7 +125,7 @@ public:
 	HTTPResponseRedirection(const string& target, int code = 301, const vector<pair<string, string>>& cookies = {}) :
 		target(target), cookies(cookies), code(code) {}
 
-	string what() const override { return "HTTP Redirection " + to_string(code) + ' ' + responses.get(code) + "\r\nLocation: " + target; }
+	string what() const override { return "HTTP Redirection " + to_string(code) + ' ' + httpdata.getResponseString(code) + "\r\nLocation: " + target; }
 
 	void send(TcpSocket::Ptr socket) override;
 
@@ -153,9 +142,9 @@ inline HTTPResponseWrapper::Ptr htmltext(const wstring& str, bool hasFrame = tru
 inline HTTPResponseWrapper::Ptr htmltext(const string& str, bool hasFrame = true, const vector<pair<string, string>>& replaces = {})
 { return make_shared<HTTPResponseShort>(str, hasFrame, replaces); }
 
-inline HTTPResponseWrapper::Ptr file(const wstring& filename, const string& mimeType = "application/octet-stream")
+inline HTTPResponseWrapper::Ptr file(const wstring& filename, const string& mimeType = string())
 { return make_shared<HTTPResponseFile>(filename, mimeType); }
-inline HTTPResponseWrapper::Ptr file(const string& filename, const string& mimeType = "application/octet-stream")
+inline HTTPResponseWrapper::Ptr file(const string& filename, const string& mimeType = string())
 { return make_shared<HTTPResponseFile>(utf8ToWstring(filename), mimeType); }
 
 inline HTTPResponseWrapper::Ptr filetemplate(const wstring& filename, const vector<pair<string, string>>& replaces = {}, bool hasFrame = true, const string& mimeType = "text/html")

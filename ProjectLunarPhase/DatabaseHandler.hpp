@@ -44,13 +44,13 @@ public:
 		}
 	}
 
-	void addUser(string username, string password) {
+	void addUser(const string& username, const string& password, const string& session) {
 		if (getUser(username) != User{})
 			return;
-		mysql.runCommand("INSERT INTO `users` (`id`, `username`, `password`, `cursession`) VALUES (?, ?, ?, ?)", 0, username, password, ""s);
+		mysql.runCommand("INSERT INTO `users` (`id`, `username`, `password`, `cursession`) VALUES (?, ?, ?, ?)", 0, username, password, session);
 	}
 
-	bool verifyUser(string username, string password) {
+	bool verifyUser(const string& username, const string& password) {
 		vector<tuple<string>> q;
 		mysql.runQuery(&q, "SELECT `password` FROM `users` WHERE `username` = ?;", username);
 		if (q.size() != 1 || get<0>(q[0]) != password)
@@ -74,8 +74,7 @@ public:
 				mysql.runQuery(&cachedPosts, "SELECT * FROM `posts`;");
 				mlog << "Database.GetPosts(): Queried size: " << cachedPosts.size() << dlog;
 				return cachedPosts;
-			}
-			catch (MySqlException e) {
+			} catch (MySqlException e) {
 				mlog << Log::Error << "There is a database exception: " << e.what() << dlog;
 			}
 		}

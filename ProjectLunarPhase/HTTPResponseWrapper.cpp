@@ -3,11 +3,45 @@
 #include "StringParser.hpp"
 #include "HTTPParser.hpp"
 
-HTTPResponseCodeStrings responses;
+HTTPStringData httpdata;
 
 namespace {
 	string frameFileContents;
 	string frameBodyFlag;
+
+	string readNextWord(const string& str, size_t& offset);
+}
+
+
+HTTPStringData::HTTPStringData() {
+	//TODO All responses
+	strings.insert(make_pair(200, "OK"));
+
+	strings.insert(make_pair(301, "Moved Permanently"));
+	strings.insert(make_pair(302, "Found"));
+	strings.insert(make_pair(303, "See Other"));
+	strings.insert(make_pair(307, "Temporary Redirect"));
+
+	strings.insert(make_pair(400, "Bad Request"));
+	strings.insert(make_pair(401, "Unauthorized"));
+	strings.insert(make_pair(403, "Forbidden"));
+	strings.insert(make_pair(404, "Not Found"));
+	strings.insert(make_pair(408, "Request Timeout"));
+	strings.insert(make_pair(411, "Length Required"));
+
+	strings.insert(make_pair(500, "Internal Server Error"));
+	strings.insert(make_pair(503, "Service Unavailable"));
+	strings.insert(make_pair(505, "HTTP Version Not Supported"));
+
+	// Load MIME types
+	string mimefile = readFileBinary(L"mime.types"), word;
+	size_t off = 0;
+	while (!(word = readNextWord(mimefile, off)).empty()) {
+		string type = word;
+		while ((word = readNextWord(mimefile, off)).back() != ';')
+			mimes.insert(make_pair(word, type));
+		mimes.insert(make_pair(word.substr(0, word.size() - 1), type));
+	}
 }
 
 
@@ -47,11 +81,10 @@ void HTTPResponseFile::send(TcpSocket::Ptr socket) {
 	file.seekg(0, ifstream::beg);
 	mlog << "Filename: " << filename << ", Size: " << fileSize << dlog;
 
-	//TODO MIME Types
 	SetHTTPVersion("HTTP/1.1");
 	SetStatus("200 OK");
 	SetHeaderValue("Server", completeServerName);
-	SetHeaderValue("Content-Type", mimeType);
+	SetHeaderValue("Content-Type", mimeType.empty() ? httpdata.getMIMEString(wstringToUtf8(filename.substr(filename.find_last_of(L'.') + 1))) : mimeType);
 	SetHeaderValue("Content-Length", to_string(fileSize));
 	SetHeaderValue("Connection", "keep-alive");
 	SetBody("");
@@ -63,8 +96,8 @@ void HTTPResponseFile::send(TcpSocket::Ptr socket) {
 	socket->Send(data.data(), data.length());
 
 	// Send the file
-	constexpr size_t maxBufferSize = 512 * 1024; // 512K buffer
-	SetMaximumBlockSize(1.2*maxBufferSize);
+	constexpr size_t maxBufferSize = 1024 * 1024; // 1M buffer
+	SetMaximumBlockSize(max(2.5*maxBufferSize, 2.2*fileSize));
 	size_t bufferSize = min(maxBufferSize, fileSize);
 	char* buffer = new char[bufferSize];
 
@@ -72,7 +105,7 @@ void HTTPResponseFile::send(TcpSocket::Ptr socket) {
 		file.read(buffer, bufferSize);
 		if (file.gcount() > 0)
 			while (!(socket->LocalHasShutdown() || socket->RemoteHasShutdown()) && !socket->Send(buffer, file.gcount()))
-				this_thread::sleep_for(chrono::milliseconds(50));
+				this_thread::sleep_for(chrono::milliseconds(5));
 	}
 
 	delete[] buffer;
@@ -82,7 +115,7 @@ void HTTPResponseFile::send(TcpSocket::Ptr socket) {
 
 void HTTPResponseTemplate::send(TcpSocket::Ptr socket) {
 	// As a template, we have to read all of the file
-	string body = readFileBinary(filename);
+	string body = readFileBinaryCached(filename);
 
 	// Return 404 Not Found if the file isn't valid
 	if (body.empty()) {
@@ -127,7 +160,7 @@ void HTTPResponseError::send(TcpSocket::Ptr socket) {
 		"</body>\r\n"
 		"</html>\r\n";
 	// Replace the error string
-	string realData = StringParser::replaceSubString(data, { { "%STR%", to_string(code) + ' ' + responses.get(code) } });
+	string realData = StringParser::replaceSubString(data, { { "%STR%", to_string(code) + ' ' + httpdata.getResponseString(code) } });
 
 	// Send it and shutdown the connection
 	socket->Send(realData.data(), realData.length());
@@ -155,9 +188,9 @@ void HTTPResponseRedirection::send(TcpSocket::Ptr socket) {
 		"</html>\r\n";
 	// Replace the noififcation string
 	string realBody = StringParser::replaceSubString(body, {
-		{ "%STR%", to_string(code) + ' ' + responses.get(code) } });
+		{ "%STR%", to_string(code) + ' ' + httpdata.getResponseString(code) } });
 	string realHeader = StringParser::replaceSubString(header, {
-		{ "%STR%", to_string(code) + ' ' + responses.get(code) }
+		{ "%STR%", to_string(code) + ' ' + httpdata.getResponseString(code) }
 		, { "%LOC%", encodePercent(target) }, { "%LEN%", to_string(realBody.size()) }
 	, { "%COOKIE%", cookies.empty() ? "" : ("Set-Cookie: " + encodeCookieSequence(cookies) + "\r\n") } });
 
@@ -168,7 +201,7 @@ void HTTPResponseRedirection::send(TcpSocket::Ptr socket) {
 
 
 void setFrameFile(const wstring& filename, const string& bodyFlag) {
-	frameFileContents = readFileBinary(filename);
+	frameFileContents = readFileBinaryCached(filename);
 	frameBodyFlag = bodyFlag;
 }
 

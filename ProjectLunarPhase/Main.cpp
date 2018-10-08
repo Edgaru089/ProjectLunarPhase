@@ -50,9 +50,30 @@ int main(int argc, char* argv[]) {
 			string cookie = generateCookie();
 			db.setUserCookie(instances["username"], cookie);
 			return redirect("/posts", 303, { { "id", cookie } });
-		}
-		else
+		} else
 			return redirect("/login", 303);
+
+	}, Instance::Post);
+
+	instance.registerRouteRule("/register", ".*", ROUTER(request){
+		// Get the username, redirect if not empty
+		string username;
+		if (string cookie = decodeCookieSequence(request.GetHeaderValue("Cookie"))["id"]; !cookie.empty())
+			if (!(username = db.getCookieUsername(cookie)).empty())
+				return redirect("/posts", 303);
+		return filetemplate(L"./html/register.html", { { "%TITLE%", "Register" } });
+	});
+
+	instance.registerRouteRule("/register", ".*", ROUTER(request){
+		if (request.GetHeaderValue("Content-Type") != "application/x-www-form-urlencoded")
+			return error(404);
+		auto instances = decodeFormUrlEncoded(request.GetBody());
+		if (db.getUser(instances["username"]).username == "") {
+			string cookie = generateCookie();
+			db.addUser(instances["username"], instances["password"], cookie);
+			return redirect("/posts", 303, { { "id", cookie } });
+		} else
+			return redirect("/register", 303);
 
 	}, Instance::Post);
 
@@ -85,7 +106,7 @@ int main(int argc, char* argv[]) {
 
 	instance.registerRouteRule("/posts", ".*", ROUTER(request){
 		// Craft the posts body
-		string cont = readFileBinary(L"./html/post_frame.html");
+		string cont = readFileBinaryCached(L"./html/post_frame.html");
 		string entries;
 		auto posts = db.getPosts();
 		for (auto&&[id, username, title, body] : posts)
@@ -96,7 +117,7 @@ int main(int argc, char* argv[]) {
 			entries = u8"<div class=\"post\">这里似乎没有内容</div>";
 
 		// Get the username
-		string nav = "<a href=\"/login\">Login</a>", username;
+		string nav = "<a href=\"/login\">Login</a> <a href=\"/register\">Register</a>", username;
 		if (string cookie = decodeCookieSequence(request.GetHeaderValue("Cookie"))["id"]; !cookie.empty())
 			if (!(username = db.getCookieUsername(cookie)).empty())
 				nav = "Logged in: " + username + " <a href=\"/logout\">Logout</a>";
@@ -104,9 +125,9 @@ int main(int argc, char* argv[]) {
 		// Add the postnew frame
 		string postnew;
 		if (username.empty())
-			postnew = readFileBinary(L"./html/postnew_frame_empty.html");
+			postnew = readFileBinaryCached(L"./html/postnew_frame_empty.html");
 		else
-			postnew = StringParser::replaceSubString(readFileBinary(L"./html/postnew_frame.html"), { { "%USER%", username } });
+			postnew = StringParser::replaceSubString(readFileBinaryCached(L"./html/postnew_frame.html"), { { "%USER%", username } });
 
 		return filetemplate(L"./html/show_entries.html", { { "%TITLE%", "Posts" }, { "%BODY%", entries }, { "%NAV%", nav }, { "%POST%", postnew } });
 	});
