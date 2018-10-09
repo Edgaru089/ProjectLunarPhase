@@ -11,7 +11,16 @@ public:
 					Uint16 port = 3306,
 					const char* username = "bndsdb",
 					const char* password = "bnds-db-admin-ScienceAndTechnolgy",
-					const char* databaseName = "bndsdb") :mysql(hostname, username, password, databaseName, port) {
+					const char* databaseName = "bndsdb")
+		:mysql(hostname, username, password, databaseName, port),
+		stmtGetUser(mysql.prepareStatement("SELECT * FROM `users` WHERE `username` = ?;")),
+		stmtAddUser(mysql.prepareStatement("INSERT INTO `users` (`id`, `username`, `password`, `cursession`) VALUES (?, ?, ?, ?)")),
+		stmtVerifyUser(mysql.prepareStatement("SELECT `password` FROM `users` WHERE `username` = ?;")),
+		stmtAddPost(mysql.prepareStatement("INSERT INTO `posts` (`id`, `username`, `title`, `body`) VALUES (?, ?, ?, ?);")),
+		stmtGetPosts(mysql.prepareStatement("SELECT * FROM `posts`;")),
+		stmtSetUserCookie(mysql.prepareStatement("UPDATE `users` SET `cursession` = ? WHERE `users`.`username` = ?;")),
+		stmtGetCookieUsername(mysql.prepareStatement("SELECT `username` FROM `users` WHERE `cursession` = ?;"))
+	{
 		// Set UTF-8 Encoding
 		mysql.runCommand("SET NAMES 'utf8';");
 	}
@@ -35,7 +44,7 @@ public:
 	typedef vector<tuple<int, string, string, string>> UserVectorTuple;
 	User getUser(string username) {
 		UserVectorTuple q;
-		mysql.runQuery(&q, "SELECT * FROM `users` WHERE `username` = ?;", username);
+		mysql.runQuery(&q, stmtGetUser, username);
 		if (q.size() != 1)
 			return User{};
 		else {
@@ -47,12 +56,12 @@ public:
 	void addUser(const string& username, const string& password, const string& session) {
 		if (getUser(username) != User{})
 			return;
-		mysql.runCommand("INSERT INTO `users` (`id`, `username`, `password`, `cursession`) VALUES (?, ?, ?, ?)", 0, username, password, session);
+		mysql.runCommand(stmtAddUser, 0, username, password, session);
 	}
 
 	bool verifyUser(const string& username, const string& password) {
 		vector<tuple<string>> q;
-		mysql.runQuery(&q, "SELECT `password` FROM `users` WHERE `username` = ?;", username);
+		mysql.runQuery(&q, stmtVerifyUser, username);
 		if (q.size() != 1 || get<0>(q[0]) != password)
 			return false;
 		else
@@ -61,33 +70,30 @@ public:
 
 	void addPost(const string& username, const string& title, const string& contents) {
 		//mysql->runCommand(*insertPost, 0, username, title, contents);
-		mysql.runCommand("INSERT INTO `posts` (`id`, `username`, `title`, `body`) VALUES (?, ?, ?, ?);", 0, username, title, contents);
+		mysql.runCommand(stmtAddPost, 0, username, title, contents);
 	}
 
 	// id, username, title, body
 	typedef vector<tuple<int, string, string, string>> PostVectorTuple;
 	const PostVectorTuple& getPosts() {
 		if (chrono::steady_clock::now() - cachedPostTime > recachePostDuartion) {
-			try {
-				cachedPosts.clear();
-				//mysql->runQuery(&cachedPosts, *listPosts);
-				mysql.runQuery(&cachedPosts, "SELECT * FROM `posts`;");
-				mlog << "Database.GetPosts(): Queried size: " << cachedPosts.size() << dlog;
-				return cachedPosts;
-			} catch (MySqlException e) {
-				mlog << Log::Error << "There is a database exception: " << e.what() << dlog;
-			}
+			cachedPostTime = chrono::steady_clock::now();
+			cachedPosts.clear();
+			//mysql->runQuery(&cachedPosts, *listPosts);
+			mysql.runQuery(&cachedPosts, stmtGetPosts);
+			mlog << "Database.GetPosts(): Queried size: " << cachedPosts.size() << dlog;
+			return cachedPosts;
 		}
 		return cachedPosts;
 	}
 
 	void setUserCookie(const string& username, const string& cookie) {
-		mysql.runCommand("UPDATE `users` SET `cursession` = ? WHERE `users`.`username` = ?;", cookie, username);
+		mysql.runCommand(stmtSetUserCookie, cookie, username);
 	}
 
 	string getCookieUsername(const string& cookie) {
 		vector<tuple<string>> q;
-		mysql.runQuery(&q, "SELECT `username` FROM `users` WHERE `cursession` = ?;", cookie);
+		mysql.runQuery(&q, stmtGetCookieUsername, cookie);
 		if (q.size() != 1)
 			return "";
 		else
@@ -97,6 +103,8 @@ public:
 private:
 
 	MySql mysql;
+
+	MySqlPreparedStatement stmtGetUser, stmtAddUser, stmtVerifyUser, stmtAddPost, stmtGetPosts, stmtSetUserCookie, stmtGetCookieUsername;
 
 	PostVectorTuple cachedPosts;
 	chrono::steady_clock::time_point cachedPostTime;

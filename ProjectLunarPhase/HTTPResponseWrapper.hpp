@@ -51,7 +51,7 @@ public:
 		SetBody(body);
 	}
 
-	string what() const override { return ToString(); }
+	string what() const override { return "<Short Response>"; }
 
 	void send(TcpSocket::Ptr socket) override;
 private:
@@ -69,7 +69,7 @@ public:
 
 	bool isFileStreamOK() { return (bool)file; }
 
-	string what() const override { return ToString() + "<File> Filename:" + wstringToUtf8(filename); }
+	string what() const override { return "<File> Filename:" + wstringToUtf8(filename); }
 
 	void send(TcpSocket::Ptr socket) override;
 
@@ -89,7 +89,7 @@ public:
 
 	bool isFileStreamOK() { return (bool)file; }
 
-	string what() const override { return ToString() + "\r\n>Filename:" + wstringToUtf8(filename); }
+	string what() const override { return "<Template> Filename:" + wstringToUtf8(filename); }
 
 	void send(TcpSocket::Ptr socket) override;
 
@@ -108,7 +108,7 @@ public:
 	HTTPResponseError() {}
 	HTTPResponseError(int code) { this->code = code; }
 
-	string what() const override { return "HTTP ERROR " + to_string(code) + ' ' + httpdata.getResponseString(code); }
+	string what() const override { return "<HTTP Error>: " + to_string(code) + ' ' + httpdata.getResponseString(code); }
 
 	void send(TcpSocket::Ptr socket) override;
 
@@ -125,7 +125,7 @@ public:
 	HTTPResponseRedirection(const string& target, int code = 301, const vector<pair<string, string>>& cookies = {}) :
 		target(target), cookies(cookies), code(code) {}
 
-	string what() const override { return "HTTP Redirection " + to_string(code) + ' ' + httpdata.getResponseString(code) + "\r\nLocation: " + target; }
+	string what() const override { return "<HTTP Redirection> Code: " + to_string(code) + ' ' + httpdata.getResponseString(code) + ", Location: " + target; }
 
 	void send(TcpSocket::Ptr socket) override;
 

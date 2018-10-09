@@ -163,6 +163,8 @@ string readFileBinaryCached(const wstring& filename) {
 		// Load or reload the file
 		if (i == fileCache.end())
 			i = fileCache.insert(make_pair(filename, make_pair(chrono::steady_clock::now(), ""))).first;
+		else
+			i->second.first = chrono::steady_clock::now();
 
 		ifstream file(filename);
 		if (!file)

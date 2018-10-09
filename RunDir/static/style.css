@@ -12,12 +12,16 @@ body {/*
 }
 
 input {
-	padding: 3px;
+	padding: .5%;
+	width: 99%;
+	border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 textarea {
-	padding: 6px;
+	padding: 1%;
+	width: 98%;
 	resize: none;
+	border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .container {
