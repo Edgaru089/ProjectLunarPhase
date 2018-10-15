@@ -86,5 +86,5 @@ private:
 };
 
 
-#define ROUTER(requestName) [&](HTTPRequest requestName)->HTTPResponseWrapper::Ptr
+#define ROUTER(requestName) [&](const HTTPRequest& requestName)->HTTPResponseWrapper::Ptr
 

@@ -41,22 +41,25 @@ namespace {
 
 #ifdef _WIN32
 
-string wstringToUtf8(const wstring& source, size_t bufferSize) {
-	vector<char> buffer(bufferSize);
-	buffer[WideCharToMultiByte(CP_UTF8, 0, source.data(), source.size(), buffer.data(), bufferSize, NULL, NULL)] = 0;
-	return string(buffer.data());
+string wstringToUtf8(const wstring& source) {
+	size_t size = WideCharToMultiByte(CP_UTF8, 0, source.data(), source.size(), NULL, NULL, NULL, NULL);
+	string buffer(size, '\0');
+	WideCharToMultiByte(CP_UTF8, 0, source.data(), source.size(), buffer.data(), buffer.size(), NULL, NULL);
+	return buffer;
 }
 
-wstring utf8ToWstring(const string& source, size_t bufferSize) {
-	vector<wchar_t> buffer(bufferSize);
-	buffer[MultiByteToWideChar(CP_UTF8, 0, source.data(), source.size(), buffer.data(), bufferSize)] = 0;
-	return wstring(buffer.data());
+wstring utf8ToWstring(const string& source) {
+	size_t size = MultiByteToWideChar(CP_UTF8, 0, source.data(), source.size(), NULL, NULL);
+	wstring buffer(size, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, source.data(), source.size(), buffer.data(), buffer.size());
+	return buffer;
 }
 
-wstring ansiToWstring(const string& source, size_t bufferSize) {
-	vector<wchar_t> buffer(bufferSize);
-	buffer[MultiByteToWideChar(CP_ACP, 0, source.data(), source.size(), buffer.data(), bufferSize)] = 0;
-	return wstring(buffer.data());
+wstring ansiToWstring(const string& source) {
+	size_t size = MultiByteToWideChar(CP_ACP, 0, source.data(), source.size(), NULL, NULL);
+	wstring buffer(size, L'\0');
+	MultiByteToWideChar(CP_ACP, 0, source.data(), source.size(), buffer.data(), buffer.size());
+	return buffer;
 }
 
 #elif
@@ -142,7 +145,7 @@ map<string, string> decodeCookieSequence(string body) {
 }
 
 string readFileBinary(const wstring& filename) {
-	ifstream file(filename);
+	ifstream file(filename, ifstream::binary);
 	if (!file)
 		return string();
 
@@ -166,7 +169,7 @@ string readFileBinaryCached(const wstring& filename) {
 		else
 			i->second.first = chrono::steady_clock::now();
 
-		ifstream file(filename);
+		ifstream file(filename, ifstream::binary);
 		if (!file)
 			return string();
 

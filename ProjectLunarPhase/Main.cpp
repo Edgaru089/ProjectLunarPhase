@@ -118,6 +118,7 @@ int main(int argc, char* argv[]) try {
 
 	instance.registerRouteRule("/share", ".*", ROUTER(request){
 		try {
+			// Decode the form sequence
 			if (request.GetHeaderValue("Content-Type") != "application/x-www-form-urlencoded")
 				return error(404);
 			auto data = decodeFormUrlEncoded(request.GetBody());
@@ -131,6 +132,7 @@ int main(int argc, char* argv[]) try {
 				else if (id == "body")
 					body = data;
 			}
+			// Post it if valid
 			if (!username.empty() && !title.empty() && !body.empty())
 				db.addPost(username, title, body);
 			return redirect("/posts", 303);
@@ -139,33 +141,190 @@ int main(int argc, char* argv[]) try {
 		}
 	}, Instance::Post);
 
+	const string control =
+		"<div style=\"float: right; font-size: 12px; background: #f7f7f7; padding: 2px;\">\r\n"
+		"	<a href=\"/posts/delete/%ID%\">Delete</a> | <a href=\"/posts/edit/%ID%\">Edit</a>\r\n"
+		"</div>\r\n";
 	instance.registerRouteRule("/posts", ".*", ROUTER(request){
 		try {
-			// Craft the posts body
-			string cont = readFileBinaryCached(L"./html/post_frame.html");
-			string entries;
-			auto posts = db.getPosts();
-			for (auto&&[id, username, title, body] : posts)
-				entries = StringParser::replaceSubString(cont, {
-					{ "%TITLE%", title }, { "%USER%", username }, { "%CONT%", StringParser::replaceSubString(body, { { "\r\n", "<br />\r\n" } }) } })
-					+ entries;
-			if (entries.empty())
-				entries = u8"<div class=\"post\">这里似乎没有内容</div>";
-
 			// Get the username
 			string nav = "<a href=\"/login\">Login</a> <a href=\"/register\">Register</a>", username;
 			if (string cookie = decodeCookieSequence(request.GetHeaderValue("Cookie"))["id"]; !cookie.empty())
 				if (!(username = db.getCookieUsername(cookie)).empty())
 					nav = "Logged in: " + username + " <a href=\"/logout\">Logout</a>";
 
+			// Craft the posts body
+			string cont = readFileBinaryCached(L"./html/post_frame.html");
+			string entries;
+			auto posts = db.getPosts();
+			for (auto&[id, postusername, title, body] : posts)
+				entries = StringParser::replaceSubString(cont, {
+					{ "%TITLE%", title },
+					{ "%USER%", postusername },
+					{ "%USERP%%", encodePercent(postusername) },
+					{ "%CONT%", StringParser::replaceSubString(body, { { "\r\n", "<br />\r\n" } }) },
+					{ "%CNTRL%", postusername == username ? control : "" },
+					{ "%ID%", to_string(id) }
+					}) + entries;
+			if (entries.empty())
+				entries = u8"<div class=\"post\">这里似乎没有内容</div>";
+
 			// Add the postnew frame
 			string postnew;
 			if (username.empty())
 				postnew = readFileBinaryCached(L"./html/postnew_frame_empty.html");
 			else
-				postnew = StringParser::replaceSubString(readFileBinaryCached(L"./html/postnew_frame.html"), { { "%USER%", username } });
+				postnew = StringParser::replaceSubString(readFileBinaryCached(L"./html/postnew_frame.html"), {
+					{ "%ACT%", "/share" },
+					{ "%USER%", username },
+					{ "%TVAL%", "" },
+					{ "%PTITLE%", "New Post" },
+					{ "%TEXT%", "" }
+					});
 
 			return filetemplate(L"./html/show_entries.html", { { "%TITLE%", "Posts" }, { "%BODY%", entries }, { "%NAV%", nav }, { "%POST%", postnew } });
+		} catch (MySqlException& e) {
+			return databaseErrorPage(e.what());
+		}
+	});
+
+	instance.registerRouteRule("/posts/delete/.*", ".*", ROUTER(request){
+		try {
+			// Get the username
+			string username;
+			if (string cookie = decodeCookieSequence(request.GetHeaderValue("Cookie"))["id"]; !cookie.empty())
+				username = db.getCookieUsername(cookie);
+
+			// Get the post id
+			auto& uri = request.GetURI();
+			string id = uri.substr(uri.find_last_of('/') + 1);
+			if (id.empty())
+				return redirect("/posts", 303);
+			int i = StringParser::toInt(id);
+			// Verify the post username and delete
+			if (db.getPostUsernameById(i) == username)
+				db.removePost(i);
+
+			// Redirect back to post screen
+			return redirect("/posts", 303);
+		} catch (MySqlException& e) {
+			return databaseErrorPage(e.what());
+		}
+	});
+
+	instance.registerRouteRule("/posts/edit/.*", ".*", ROUTER(request){
+		try {
+			// Get the username
+			string username;
+			if (string cookie = decodeCookieSequence(request.GetHeaderValue("Cookie"))["id"]; !cookie.empty())
+				username = db.getCookieUsername(cookie);
+
+			// Get the post
+			auto& uri = request.GetURI();
+			string id = uri.substr(uri.find_last_of('/') + 1);
+			if (id.empty())
+				return redirect("/posts", 303);
+			int i = StringParser::toInt(id);
+			DatabaseHandler::Post post = db.getPostById(i);
+			// Verify the post username
+			if (post.username != username)
+				return redirect("/posts", 303);
+
+			// Craft the postnew frame
+			string postnew;
+			if (username.empty())
+				return redirect("/posts", 303);
+			else
+				postnew = StringParser::replaceSubString(readFileBinaryCached(L"./html/postnew_frame.html"), {
+					{ "%ACT%", uri },
+					{ "%USER%", post.username },
+					{ "%TVAL%", post.title },
+					{ "%PTITLE%", "Edit Post" },
+					{ "%TEXT%", post.body } });
+
+			return filetemplate(L"./html/show_nav_header.html", {
+				{ "%TITLE%", "Edit Post" },
+				{ "%BODY%", postnew },
+				{ "%NAV%", "Logged in: " + username + " <a href=\"/logout\">Logout</a>" } });
+		} catch (MySqlException& e) {
+			return databaseErrorPage(e.what());
+		}
+	});
+
+	instance.registerRouteRule("/posts/edit/.*", ".*", ROUTER(request){
+		try {
+			// Get the username
+			string username;
+			if (string cookie = decodeCookieSequence(request.GetHeaderValue("Cookie"))["id"]; !cookie.empty())
+				username = db.getCookieUsername(cookie);
+
+			// Get the post id
+			auto& uri = request.GetURI();
+			string id = uri.substr(uri.find_last_of('/') + 1);
+			if (id.empty())
+				return redirect("/posts", 303);
+			int i = StringParser::toInt(id);
+			// Verify the post username
+			if (db.getPostUsernameById(i) != username)
+				return redirect("/posts", 303);
+
+			// Decode the form sequence
+			if (request.GetHeaderValue("Content-Type") != "application/x-www-form-urlencoded")
+				return error(404);
+			auto data = decodeFormUrlEncoded(request.GetBody());
+
+			string title, body;
+			for (auto&[id, data] : data) {
+				if (id == "title")
+					title = data;
+				else if (id == "body")
+					body = data;
+			}
+			// Update the post
+			if (!title.empty() && !body.empty())
+				db.updatePost(i, title, body);
+
+			// Redirect back to post screen
+			return redirect("/posts", 303);
+		} catch (MySqlException& e) {
+			return databaseErrorPage(e.what());
+		}
+	}, Instance::Post);
+
+	instance.registerRouteRule("/user/.*", ".*", ROUTER(request){
+		try {
+			// Get the username by cookie
+			string nav = "<a href=\"/login\">Login</a> <a href=\"/register\">Register</a>", username;
+			if (string cookie = decodeCookieSequence(request.GetHeaderValue("Cookie"))["id"]; !cookie.empty())
+				if (!(username = db.getCookieUsername(cookie)).empty())
+					nav = "Logged in: " + username + " <a href=\"/logout\">Logout</a>";
+
+			// Get the username in the URI
+			auto& uri = request.GetURI();
+			string user = decodePercentEncoding(uri.substr(uri.substr(1).find_first_of('/') + 2));
+
+			// Craft the posts body
+			string cont = readFileBinaryCached(L"./html/post_frame.html");
+			string entries;
+			DatabaseHandler::PostVectorTuple posts;
+			db.getPostsByUsername(user, posts);
+			for (auto&[id, postusername, title, body] : posts)
+				entries = StringParser::replaceSubString(cont, {
+					{ "%TITLE%", title },
+					{ "%USER%", postusername },
+					{ "%USERP%%", encodePercent(postusername) },
+					{ "%CONT%", StringParser::replaceSubString(body, { { "\r\n", "<br />\r\n" } }) },
+					{ "%CNTRL%", postusername == username ? control : "" },
+					{ "%ID%", to_string(id) }
+					}) + entries;
+			if (entries.empty())
+				entries = u8"<div class=\"post\">这里似乎没有内容</div>";
+
+			return filetemplate(L"./html/show_user_posts.html", {
+				{ "%TITLE%", "User Posts" },
+				{ "%USER%", user },
+				{ "%BODY%", entries },
+				{ "%NAV%", nav } });
 		} catch (MySqlException& e) {
 			return databaseErrorPage(e.what());
 		}

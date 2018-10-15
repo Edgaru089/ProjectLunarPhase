@@ -8,16 +8,21 @@ class DatabaseHandler {
 public:
 
 	DatabaseHandler(const char* hostname = "localhost",
-					Uint16 port = 3306,
-					const char* username = "bndsdb",
-					const char* password = "bnds-db-admin-ScienceAndTechnolgy",
-					const char* databaseName = "bndsdb")
+		Uint16 port = 3306,
+		const char* username = "bndsdb",
+		const char* password = "bnds-db-admin-ScienceAndTechnolgy",
+		const char* databaseName = "bndsdb")
 		:mysql(hostname, username, password, databaseName, port),
 		stmtGetUser(mysql.prepareStatement("SELECT * FROM `users` WHERE `username` = ?;")),
 		stmtAddUser(mysql.prepareStatement("INSERT INTO `users` (`id`, `username`, `password`, `cursession`) VALUES (?, ?, ?, ?)")),
 		stmtVerifyUser(mysql.prepareStatement("SELECT `password` FROM `users` WHERE `username` = ?;")),
 		stmtAddPost(mysql.prepareStatement("INSERT INTO `posts` (`id`, `username`, `title`, `body`) VALUES (?, ?, ?, ?);")),
 		stmtGetPosts(mysql.prepareStatement("SELECT * FROM `posts`;")),
+		stmtGetPostsByUsername(mysql.prepareStatement("SELECT * FROM `posts` WHERE `username` = ?;")),
+		stmtGetPostById(mysql.prepareStatement("SELECT * FROM `posts` WHERE `id` = ?;")),
+		stmtGetPostUsernameById(mysql.prepareStatement("SELECT `username` FROM `posts` WHERE `id` = ?;")),
+		stmtRemovePost(mysql.prepareStatement("DELETE FROM `posts` WHERE `id` = ?;")),
+		stmtUpdatePost(mysql.prepareStatement("UPDATE `posts` SET `title` = ?, `body` = ? WHERE `id` = ?;")),
 		stmtSetUserCookie(mysql.prepareStatement("UPDATE `users` SET `cursession` = ? WHERE `users`.`username` = ?;")),
 		stmtGetCookieUsername(mysql.prepareStatement("SELECT `username` FROM `users` WHERE `cursession` = ?;"))
 	{
@@ -69,7 +74,6 @@ public:
 	}
 
 	void addPost(const string& username, const string& title, const string& contents) {
-		//mysql->runCommand(*insertPost, 0, username, title, contents);
 		mysql.runCommand(stmtAddPost, 0, username, title, contents);
 	}
 
@@ -85,6 +89,41 @@ public:
 			return cachedPosts;
 		}
 		return cachedPosts;
+	}
+
+	void getPostsByUsername(const string& username, PostVectorTuple& vec) {
+		vec.clear();
+		mysql.runQuery(&vec, stmtGetPostsByUsername, username);
+	}
+
+	Post getPostById(int id) {
+		PostVectorTuple qans;
+		mysql.runQuery(&qans, stmtGetPostById, id);
+		if (qans.size() != 1)
+			return Post();
+		else {
+			auto&[id, username, title, body] = qans[0];
+			return Post{ id, username, title, body };
+		}
+	}
+
+	string getPostUsernameById(int id) {
+		vector<tuple<string>> qans;
+		mysql.runQuery(&qans, stmtGetPostUsernameById, id);
+		if (qans.size() != 1)
+			return "";
+		else
+			return get<0>(qans[0]);
+	}
+
+	void removePost(int id) {
+		mysql.runCommand(stmtRemovePost, id);
+		cachedPosts.clear();
+	}
+
+	void updatePost(int id, const string& title, const string& contents) {
+		mysql.runCommand(stmtUpdatePost, title, contents, id);
+		cachedPosts.clear();
 	}
 
 	void setUserCookie(const string& username, const string& cookie) {
@@ -104,7 +143,19 @@ private:
 
 	MySql mysql;
 
-	MySqlPreparedStatement stmtGetUser, stmtAddUser, stmtVerifyUser, stmtAddPost, stmtGetPosts, stmtSetUserCookie, stmtGetCookieUsername;
+	MySqlPreparedStatement
+		stmtGetUser,
+		stmtAddUser,
+		stmtVerifyUser,
+		stmtAddPost,
+		stmtGetPosts,
+		stmtGetPostsByUsername,
+		stmtGetPostById,
+		stmtGetPostUsernameById,
+		stmtRemovePost,
+		stmtUpdatePost,
+		stmtSetUserCookie,
+		stmtGetCookieUsername;
 
 	PostVectorTuple cachedPosts;
 	chrono::steady_clock::time_point cachedPostTime;

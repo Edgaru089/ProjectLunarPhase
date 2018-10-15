@@ -32,9 +32,9 @@ using namespace sfn;
 
 
 #ifdef _WIN32
-string wstringToUtf8(const wstring& source, size_t bufferSize = 16384);
-wstring utf8ToWstring(const string& source, size_t bufferSize = 16384);
-wstring ansiToWstring(const string& source, size_t bufferSize = 16384);
+string wstringToUtf8(const wstring& source);
+wstring utf8ToWstring(const string& source);
+wstring ansiToWstring(const string& source);
 #elif
 #pragma error("I'm too lazy to implement a cross-platform UTF-8 <-> wchar_t convertion")
 #endif
