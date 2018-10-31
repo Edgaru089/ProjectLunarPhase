@@ -18,6 +18,7 @@
 #include <chrono>
 #include <random>
 #include <map>
+#include <atomic>
 #include <SFNUL.hpp>
 
 #ifdef _WIN32

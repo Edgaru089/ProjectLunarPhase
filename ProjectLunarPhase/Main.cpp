@@ -5,6 +5,30 @@
 Log dlog;
 ofstream logout;
 
+atomic_bool running, stopped;
+
+#ifdef _WIN32
+//Platform-Depedent: Windows
+BOOL systemExitEventHandler(DWORD dwCtrlType) {
+	if (dwCtrlType == CTRL_C_EVENT)
+		mlog << Log::Error << "[Main/EVENT] Control-C Console Exit" << dlog;
+	else if (dwCtrlType == CTRL_BREAK_EVENT)
+		mlog << Log::Error << "[Main/EVENT] Control-Break Console Exit" << dlog;
+	else if (dwCtrlType == CTRL_CLOSE_EVENT)
+		mlog << Log::Error << "[Main/EVENT] Control-Close Console Exit" << dlog;
+	else if (dwCtrlType == CTRL_LOGOFF_EVENT)
+		mlog << Log::Error << "[Main/EVENT] System-Logoff Exit" << dlog;
+	else if (dwCtrlType == CTRL_SHUTDOWN_EVENT)
+		mlog << Log::Error << "[Main/EVENT] System-Shutdown Exit" << dlog;
+	else
+		return false;
+	running = false;
+	while (!stopped)
+		this_thread::sleep_for(chrono::milliseconds(50));
+	return true;
+}
+#endif
+
 
 int main(int argc, char* argv[]) try {
 	// Open a binary output stream for logs
@@ -23,6 +47,12 @@ int main(int argc, char* argv[]) try {
 		logout.write(u8str.data(), u8str.size());
 		logout.flush();
 	});
+
+	running = true;
+	stopped = false;
+#ifdef _WIN32
+	SetConsoleCtrlHandler((PHANDLER_ROUTINE)systemExitEventHandler, true);
+#endif
 
 	//MySql mysql("localhost","bndsdb","bnds-db-admin-ScienceAndTechnolgy");
 	DatabaseHandler db;
@@ -330,14 +360,16 @@ int main(int argc, char* argv[]) try {
 		}
 	});
 
-	instance.start(Instance::Config{ true, 5000, 5443, L"./ssl/127.0.0.1.cer", L"./ssl/127.0.0.1.key" });
+	instance.start(Instance::Config{ false, 5000 });
 
-	// Pause for a newline
-	cin.ignore(10000, '\n');
+	while (running)
+		this_thread::sleep_for(chrono::milliseconds(50));
 
 	instance.stop();
 
 	Stop();
+
+	stopped = true;
 
 } catch (exception& e) {
 	mlog << Log::Error << "The main closure failed with an uncaught exception: " << e.what() << dlog;
