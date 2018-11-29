@@ -18,6 +18,10 @@ public:
 	struct Config {
 		// Use HTTPS
 		bool useHTTPS = false;
+		// Use IPv4 Listener
+		bool listenIPv4 = true;
+		// Use IPv6 Listener
+		bool listenIPv6 = true;
 
 		// Port the HTTP server will be listening
 		Uint16 port = 5000;
@@ -61,8 +65,8 @@ private:
 
 	friend class HTTPHandler;
 
-	void _HTTPListener();
-	void _HTTPSListener();
+	void _HTTPListener(TcpListener::Ptr listener);
+	void _HTTPSListener(TcpListener::Ptr listener);
 	void _maintainer();
 
 	void _connectionHandler(TcpSocket::Ptr socket);
@@ -71,13 +75,17 @@ private:
 	list<tuple<regex, regex, RouteHandlerFunction>> getRoutes, postRoutes;
 	HTTPResponseWrapper::Ptr _dispatchRequest(HTTPRequest& request);
 
-	shared_ptr<thread> httpListener, httpsListener, maintainer;
+	shared_ptr<thread> httpListener, httpsListener;
+	shared_ptr<thread> httpListenerV6, httpsListenerV6;
+	shared_ptr<thread> maintainer;
 	std::list<pair<sfn::TcpSocket::Ptr, shared_ptr<thread>>> sockets;
 	mutex queueLock;
 
 	atomic_bool running;
 
 	bool useHTTPS;
+	bool listenIPv4;
+	bool listenIPv6;
 
 	Uint16 port, portHTTPS;
 

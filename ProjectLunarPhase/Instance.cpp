@@ -29,6 +29,7 @@ void Instance::start(Instance::Config&& conf) {
 	mlog << "Server Starting..." << dlog;
 
 	useHTTPS = conf.useHTTPS;
+	listenIPv6 = conf.listenIPv6;
 	port = conf.port;
 	portHTTPS = conf.portHTTPS;
 
@@ -48,15 +49,39 @@ void Instance::start(Instance::Config&& conf) {
 	}
 
 	if (useHTTPS)
-		mlog << "HTTP Port: " << port << ", HTTPS Port: " << portHTTPS << '\n' << dlog;
+		mlog << "HTTP Port: " << port << ", HTTPS Port: " << portHTTPS << dlog;
 	else
-		mlog << "HTTP Port: " << port << ", HTTPS Turned Off" << '\n' << dlog;
+		mlog << "HTTP Port: " << port << ", HTTPS Turned Off" << dlog;
+	mlog << "IPv4 Listening: " << (listenIPv4 ? "On" : "Off") << ", IPv6 Listening: " << (listenIPv6 ? "On" : "Off") << '\n' << dlog;
 
 	running = true;
 
-	httpListener = make_shared<thread>(&Instance::_HTTPListener, this);
-	if (useHTTPS)
-		httpsListener = make_shared<thread>(&Instance::_HTTPSListener, this);
+	if (listenIPv4) {
+		httpListener = make_shared<thread>([this]() {
+			auto listener = TcpListener::Create();
+			listener->Listen(sfn::Endpoint(sfn::IpAddress("0.0.0.0"), port));
+			_HTTPListener(listener);
+		});
+		if (useHTTPS)
+			httpsListener = make_shared<thread>([this]() {
+			auto listener = TcpListener::Create();
+			listener->Listen(sfn::Endpoint(sfn::IpAddress("0.0.0.0"), port));
+			_HTTPSListener(listener);
+		});
+	}
+	if (listenIPv6) {
+		httpListenerV6 = make_shared<thread>([this]() {
+			auto listener = TcpListener::Create();
+			listener->Listen(sfn::Endpoint(sfn::IpAddress("::"), port));
+			_HTTPListener(listener);
+		});
+		if (useHTTPS)
+			httpsListenerV6 = make_shared<thread>([this]() {
+			auto listener = TcpListener::Create();
+			listener->Listen(sfn::Endpoint(sfn::IpAddress("::"), port));
+			_HTTPSListener(listener);
+		});
+	}
 }
 
 
@@ -89,18 +114,14 @@ void Instance::_maintainer() {
 				if (i->second->joinable())
 					i->second->join();
 				i = sockets.erase(i);
-			}
-			else
+			} else
 				i++;
-		queueLock.unlock();
+			queueLock.unlock();
 	}
 }
 
 
-void Instance::_HTTPListener() {
-	auto listener = TcpListener::Create();
-	listener->Listen(sfn::Endpoint(sfn::IpAddress("0.0.0.0"), port));
-
+void Instance::_HTTPListener(TcpListener::Ptr listener) {
 	sfn::TcpSocket::Ptr socket;
 	while (running) {
 		socket = nullptr;
@@ -112,7 +133,7 @@ void Instance::_HTTPListener() {
 			queueLock.lock();
 			sockets.emplace_back(socket,
 								 make_shared<thread>(&Instance::_connectionHandler, this, socket));
-			mloge << "HTTP Connected: " << ansiToWstring((string)socket->GetRemoteEndpoint().GetAddress()) << ":" << socket->GetRemoteEndpoint().GetPort() << dlog;
+			mloge << "HTTP Connected: [" << ansiToWstring((string)socket->GetRemoteEndpoint().GetAddress()) << "]:" << socket->GetRemoteEndpoint().GetPort() << dlog;
 			queueLock.unlock();
 		}
 
@@ -124,11 +145,8 @@ void Instance::_HTTPListener() {
 }
 
 
-void Instance::_HTTPSListener() {
+void Instance::_HTTPSListener(TcpListener::Ptr listener) {
 	typedef sfn::TlsConnection<sfn::TcpSocket, sfn::TlsEndpointType::Server, sfn::TlsVerificationType::None> Connection;
-
-	auto listener = TcpListener::Create();
-	listener->Listen(Endpoint(IpAddress("0.0.0.0"), portHTTPS));
 
 	Connection::Ptr connection;
 	while (running) {
@@ -143,7 +161,7 @@ void Instance::_HTTPSListener() {
 			queueLock.lock();
 			sockets.emplace_back(connection,
 								 make_shared<thread>(&Instance::_connectionHandler, this, connection));
-			mloge << "HTTPS Connected: " << ansiToWstring((string)connection->GetRemoteEndpoint().GetAddress()) << ":" << connection->GetRemoteEndpoint().GetPort() << dlog;
+			mloge << "HTTPS Connected: [" << ansiToWstring((string)connection->GetRemoteEndpoint().GetAddress()) << "]:" << connection->GetRemoteEndpoint().GetPort() << dlog;
 			queueLock.unlock();
 		}
 
@@ -174,8 +192,7 @@ void Instance::_connectionHandler(TcpSocket::Ptr socket) {
 				else
 					CRLFCount = 0;
 			}
-		}
-		catch (DisconnectedException) {
+		} catch (DisconnectedException) {
 			break;
 		}
 
@@ -183,8 +200,7 @@ void Instance::_connectionHandler(TcpSocket::Ptr socket) {
 		HTTPRequest request;
 		try {
 			request = HTTPParser::parseRequest(header);
-		}
-		catch (HTTPParser::BadRequestException) {
+		} catch (HTTPParser::BadRequestException) {
 			// Create a 400 Bad Request response and send it (therefore closing the connection)
 			HTTPResponseError(400).send(socket);
 			break;

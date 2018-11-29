@@ -360,7 +360,7 @@ int main(int argc, char* argv[]) try {
 		}
 	});
 
-	instance.start(Instance::Config{ false, 5000 });
+	instance.start(Instance::Config{ false, true, true, 5000 });
 
 	while (running)
 		this_thread::sleep_for(chrono::milliseconds(50));
