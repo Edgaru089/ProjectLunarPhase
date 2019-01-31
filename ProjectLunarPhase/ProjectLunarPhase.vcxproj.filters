@@ -16,6 +16,9 @@
     <Filter Include="Utilities">
       <UniqueIdentifier>{02c4c56f-3ee7-4a70-a240-a75297e577ee}</UniqueIdentifier>
     </Filter>
+    <Filter Include="HTTP\SFNUL">
+      <UniqueIdentifier>{1a3aeff2-a50f-43e8-b9e6-74d6feb33162}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="HTTPParser.hpp">
@@ -57,6 +60,12 @@
     <ClInclude Include="Version.hpp">
       <Filter>Utilities</Filter>
     </ClInclude>
+    <ClInclude Include="SFNUL\Config.hpp">
+      <Filter>HTTP\SFNUL</Filter>
+    </ClInclude>
+    <ClInclude Include="SFNUL\HTTP.hpp">
+      <Filter>HTTP\SFNUL</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -82,6 +91,9 @@
     </ClCompile>
     <ClCompile Include="MainF.cpp">
       <Filter>Main</Filter>
+    </ClCompile>
+    <ClCompile Include="SFNUL\HTTP.cpp">
+      <Filter>HTTP\SFNUL</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

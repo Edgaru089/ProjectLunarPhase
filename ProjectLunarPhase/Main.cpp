@@ -1,4 +1,4 @@
-#include "Main.hpp"
+ï»¿#include "Main.hpp"
 #include "Instance.hpp"
 #include "DatabaseHandler.hpp"
 
@@ -27,6 +27,15 @@ BOOL systemExitEventHandler(DWORD dwCtrlType) {
 		this_thread::sleep_for(chrono::milliseconds(50));
 	return true;
 }
+#else
+// Assuming a POSIX system
+void sigintHandler(int signal) {
+	if (signal == SIGINT)
+		mlog << Log::Error << "[Main/EVENT] POSIX SIGINT Exit" << dlog;
+	else if (signal == SIGTERM)
+		mlog << Log::Error << "[Main/EVENT] POSIX SIGTERM Exit" << dlog;
+	running = false;
+}
 #endif
 
 
@@ -36,11 +45,15 @@ int main(int argc, char* argv[]) try {
 	wchar_t buffer[64] = {};
 	char signature[] = u8"\ufeff";
 	wcsftime(buffer, 63, L"logs/%Y-%m-%d-%H.%M.%S.log", localtime(&curtime));
-	logout.open(buffer, ofstream::binary);
+	OPEN_FSTREAM_WSTR(logout, buffer, ofstream::binary);
 	logout.write(signature, sizeof(signature) - 1);
 
+#if (defined WIN32) || (defined _WIN32)
 	locale::global(locale("", LC_CTYPE));
 	wcout.imbue(locale("", LC_CTYPE));
+#else
+	setlocale(LC_CTYPE, "zh_CN.utf8");
+#endif
 	dlog.addOutputStream(wcout);
 	dlog.addOutputHandler([&](const wstring& str) {
 		string u8str = wstringToUtf8(str) + "\r\n";
@@ -52,12 +65,13 @@ int main(int argc, char* argv[]) try {
 	stopped = false;
 #ifdef _WIN32
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE)systemExitEventHandler, true);
+#else
+	signal(SIGINT, sigintHandler);
+	signal(SIGTERM, sigintHandler);
 #endif
 
 	//MySql mysql("localhost","bndsdb","bnds-db-admin-ScienceAndTechnolgy");
 	DatabaseHandler db;
-
-	Start(8);
 
 	Instance instance;
 
@@ -77,7 +91,7 @@ int main(int argc, char* argv[]) try {
 
 	instance.registerRouteRule("/sanae", ".*", ROUTER(){
 		string body = u8"<img src=\"static/sanae.png\" alt=\"sanae.png\" style=\"width: 350px; background-color: #fff\">"
-			"</img><br />–|ïL¹ÈÔçÃç / ¶«·ç¹ÈÔçÃç<br />Kochiya Sanae\r\n";
+			"</img><br />æ±é¢¨è°·æ—©è‹— / ä¸œé£è°·æ—©è‹—<br />Kochiya Sanae\r\n";
 		return htmltext(body, true, { { "%TITLE%", "Kochiya Sanae" } });
 	});
 
@@ -197,7 +211,7 @@ int main(int argc, char* argv[]) try {
 					{ "%ID%", to_string(id) }
 					}) + entries;
 			if (entries.empty())
-				entries = u8"<div class=\"post\">ÕâÀïËÆºõÃ»ÓĞÄÚÈİ</div>";
+				entries = u8"<div class=\"post\">è¿™é‡Œä¼¼ä¹æ²¡æœ‰å†…å®¹</div>";
 
 			// Add the postnew frame
 			string postnew;
@@ -348,7 +362,7 @@ int main(int argc, char* argv[]) try {
 					{ "%ID%", to_string(id) }
 					}) + entries;
 			if (entries.empty())
-				entries = u8"<div class=\"post\">ÕâÀïËÆºõÃ»ÓĞÄÚÈİ</div>";
+				entries = u8"<div class=\"post\">è¿™é‡Œä¼¼ä¹æ²¡æœ‰å†…å®¹</div>";
 
 			return filetemplate(L"./html/show_user_posts.html", {
 				{ "%TITLE%", "User Posts" },
@@ -360,20 +374,27 @@ int main(int argc, char* argv[]) try {
 		}
 	});
 
-	instance.start(Instance::Config{ false, true, true, 5000 });
+	instance.start(Instance::Config());
 
 	while (running)
 		this_thread::sleep_for(chrono::milliseconds(50));
 
 	instance.stop();
 
-	Stop();
-
 	stopped = true;
 
+	return 0;
 } catch (exception& e) {
 	mlog << Log::Error << "The main closure failed with an uncaught exception: " << e.what() << dlog;
-	mlog << Log::Error << "Exception typename: " << typeid(e).name() << " (" << typeid(e).raw_name() << ")" << dlog;
+	mlog << Log::Error << "Exception typename: " << typeid(e).name()
+#if (defined WIN32) || (defined _WIN32)
+		<< " (" << typeid(e).raw_name() << ")"
+#endif
+		<< dlog;
+	mlog << Log::Error << "The program will now fail." << dlog;
+	return 1;
+} catch (...) {
+	mlog << Log::Error << "The main closure failed with an unknown object thrown." << dlog;
 	mlog << Log::Error << "The program will now fail." << dlog;
 	return 1;
 }

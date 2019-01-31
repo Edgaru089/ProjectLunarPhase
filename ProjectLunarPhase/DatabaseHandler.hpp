@@ -7,7 +7,7 @@
 class DatabaseHandler {
 public:
 
-	DatabaseHandler(const char* hostname = "localhost",
+	DatabaseHandler(const char* hostname = "127.0.0.1",
 		Uint16 port = 3306,
 		const char* username = "bndsdb",
 		const char* password = "bnds-db-admin-ScienceAndTechnolgy",

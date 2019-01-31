@@ -33,7 +33,7 @@ class HTTPParser {
 public:
 
 	class BadRequestException :public exception {
-		char const* what() const override { return "HTTP/400 Bad Request"; }
+		char const* what() const noexcept override { return "HTTP/400 Bad Request"; }
 	};
 
 	static HTTPRequest parseRequest(string header) {

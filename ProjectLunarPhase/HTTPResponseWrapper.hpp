@@ -34,7 +34,7 @@ extern HTTPStringData httpdata;
 class HTTPResponseWrapper :public HTTPResponse {
 public:
 	typedef shared_ptr<HTTPResponseWrapper> Ptr;
-	virtual void send(TcpSocket::Ptr socket) = 0;
+	virtual void send(shared_ptr<TcpSocket> socket) = 0;
 	virtual string what() const = 0;
 };
 
@@ -53,7 +53,7 @@ public:
 
 	string what() const override { return "<Short Response>"; }
 
-	void send(TcpSocket::Ptr socket) override;
+	void send(shared_ptr<TcpSocket> socket) override;
 private:
 	bool hasFrame;
 	vector<pair<string, string>> replaces;
@@ -71,7 +71,7 @@ public:
 
 	string what() const override { return "<File> Filename:" + wstringToUtf8(filename); }
 
-	void send(TcpSocket::Ptr socket) override;
+	void send(shared_ptr<TcpSocket> socket) override;
 
 private:
 	wstring filename;
@@ -91,7 +91,7 @@ public:
 
 	string what() const override { return "<Template> Filename:" + wstringToUtf8(filename); }
 
-	void send(TcpSocket::Ptr socket) override;
+	void send(shared_ptr<TcpSocket> socket) override;
 
 private:
 	bool hasFrame;
@@ -110,7 +110,7 @@ public:
 
 	string what() const override { return "<HTTP Error>: " + to_string(code) + ' ' + httpdata.getResponseString(code); }
 
-	void send(TcpSocket::Ptr socket) override;
+	void send(shared_ptr<TcpSocket> socket) override;
 
 private:
 	int code;
@@ -127,7 +127,7 @@ public:
 
 	string what() const override { return "<HTTP Redirection> Code: " + to_string(code) + ' ' + httpdata.getResponseString(code) + ", Location: " + target; }
 
-	void send(TcpSocket::Ptr socket) override;
+	void send(shared_ptr<TcpSocket> socket) override;
 
 private:
 	string target;

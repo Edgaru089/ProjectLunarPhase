@@ -6,19 +6,22 @@
 namespace {
 
 	class DisconnectedException :public exception {
-		char const* what() const override { return "Socket disconnected when waiting for contents"; }
+		char const* what() const noexcept override { return "Socket disconnected when waiting for contents"; }
 	};
 
-	// Blocking
-	unsigned char getchar(TcpSocket::Ptr socket) {
+	unsigned char getchar(shared_ptr<TcpSocket> socket) {
 		unsigned char c = 0;
-		while (!((socket->LocalHasShutdown() || socket->RemoteHasShutdown()) && socket->BytesToReceive() == 0) && socket->Receive(&c, 1) == 0)
-			this_thread::sleep_for(chrono::milliseconds(75));
-		if ((socket->LocalHasShutdown() || socket->RemoteHasShutdown()) && socket->BytesToReceive() == 0)
+		size_t i = 0;
+
+		Socket::Status stat;
+		while ((stat = socket->receive(&c, 1, i)) != Socket::Disconnected&&stat != Socket::Error && i <= 0) {
+			if (stat == Socket::NotReady || stat == Socket::Partial)
+				sleep(milliseconds(2));
+			i = 0;
+		}
+		if (stat == Socket::Disconnected || stat == Socket::Error)
 			throw DisconnectedException();
-		//#ifndef DISABLE_ALL_LOGS
-		//		putchar(c);
-		//#endif
+
 		return c;
 	}
 
@@ -28,79 +31,39 @@ namespace {
 void Instance::start(Instance::Config&& conf) {
 	mlog << "Server Starting..." << dlog;
 
-	useHTTPS = conf.useHTTPS;
-	listenIPv6 = conf.listenIPv6;
 	port = conf.port;
-	portHTTPS = conf.portHTTPS;
 
-	if (useHTTPS) {
-		cert = nullptr;
-		key = nullptr;
-		if (string str = readFileBinaryCached(conf.cert); !str.empty())
-			cert = TlsCertificate::Create(str);
-		if (string str = readFileBinaryCached(conf.key); !str.empty())
-			key = TlsKey::Create(str, conf.keypass);
-		if (!cert)
-			mlog << Log::Error << "Certificate loading failed! Filename: " << conf.cert << dlog;
-		if (!key)
-			mlog << Log::Error << "Certificate private key loading failed! Filename: " << conf.key << dlog;
-		if (!cert || !key)
-			useHTTPS = false;
-	}
-
-	if (useHTTPS)
-		mlog << "HTTP Port: " << port << ", HTTPS Port: " << portHTTPS << dlog;
-	else
-		mlog << "HTTP Port: " << port << ", HTTPS Turned Off" << dlog;
-	mlog << "IPv4 Listening: " << (listenIPv4 ? "On" : "Off") << ", IPv6 Listening: " << (listenIPv6 ? "On" : "Off") << '\n' << dlog;
+	mlog << "HTTP Port: " << port << ", HTTPS Turned Off" << dlog;
+	mlog << "IPv4 Listening: " << (true ? "On" : "Off") << ", IPv6 Listening: " << (false ? "On" : "Off") << '\n' << dlog;
 
 	running = true;
 
-	if (listenIPv4) {
-		httpListener = make_shared<thread>([this]() {
-			auto listener = TcpListener::Create();
-			listener->Listen(sfn::Endpoint(sfn::IpAddress("0.0.0.0"), port));
-			_HTTPListener(listener);
-		});
-		if (useHTTPS)
-			httpsListener = make_shared<thread>([this]() {
-			auto listener = TcpListener::Create();
-			listener->Listen(sfn::Endpoint(sfn::IpAddress("0.0.0.0"), port));
-			_HTTPSListener(listener);
-		});
-	}
-	if (listenIPv6) {
-		httpListenerV6 = make_shared<thread>([this]() {
-			auto listener = TcpListener::Create();
-			listener->Listen(sfn::Endpoint(sfn::IpAddress("::"), port));
-			_HTTPListener(listener);
-		});
-		if (useHTTPS)
-			httpsListenerV6 = make_shared<thread>([this]() {
-			auto listener = TcpListener::Create();
-			listener->Listen(sfn::Endpoint(sfn::IpAddress("::"), port));
-			_HTTPSListener(listener);
-		});
-	}
+	httpListener = make_shared<thread>([this]() {
+		auto listener = make_shared<TcpListener>();
+		listener->listen(port);
+		_HTTPListener(listener);
+	});
+
+	maintainer = make_shared<thread>(&Instance::_maintainer, this);
 }
 
 
 void Instance::stop() {
 	mlog << "Stopping..." << dlog;
 	running = false;
-	for (auto&[connection, handler] : sockets) {
-		connection->Shutdown();
+	for (auto&[connection, handler, connected] : sockets) {
+		connection->disconnect();
 		if (handler->joinable())
 			handler->join();
 	}
 
 	if (httpListener && httpListener->joinable())
 		httpListener->join();
-	if (httpsListener && httpsListener->joinable())
-		httpsListener->join();
+	if (maintainer&&maintainer->joinable())
+		maintainer->join();
 
 	sockets.clear();
-	httpListener = httpsListener = nullptr;
+	httpListener = nullptr;
 	mlog << "Server Stopped" << dlog;
 }
 
@@ -110,9 +73,9 @@ void Instance::_maintainer() {
 		this_thread::sleep_for(chrono::milliseconds(300));
 		queueLock.lock();
 		for (auto i = sockets.begin(); i != sockets.end();)
-			if (i->first->RemoteHasShutdown() && i->first->BytesToSend() == 0) {
-				if (i->second->joinable())
-					i->second->join();
+			if (!(*get<2>(*i))) {
+				if (get<1>(*i)->joinable())
+					get<1>(*i)->join();
 				i = sockets.erase(i);
 			} else
 				i++;
@@ -121,66 +84,43 @@ void Instance::_maintainer() {
 }
 
 
-void Instance::_HTTPListener(TcpListener::Ptr listener) {
-	sfn::TcpSocket::Ptr socket;
+void Instance::_HTTPListener(shared_ptr<TcpListener> listener) {
+	shared_ptr<TcpSocket> socket = nullptr;
+	Socket::Status stat;
+	listener->setBlocking(false);
 	while (running) {
-		socket = nullptr;
-		// Dequeue any pending connections from the listener.
-		while ((socket = listener->GetPendingConnection())) {
-			// Turn off connection lingering.
-			socket->SetLinger(0);
+		if (!socket)
+			socket = make_shared<TcpSocket>();
+		if ((stat = listener->accept(*socket)) == Socket::Done) {
 			// Create a handler thread and store the connection.
 			queueLock.lock();
+			auto connflag = make_shared<atomic_bool>(true);
 			sockets.emplace_back(socket,
-								 make_shared<thread>(&Instance::_connectionHandler, this, socket));
-			mloge << "HTTP Connected: [" << ansiToWstring((string)socket->GetRemoteEndpoint().GetAddress()) << "]:" << socket->GetRemoteEndpoint().GetPort() << dlog;
+								 make_shared<thread>(&Instance::_connectionHandler, this, socket, connflag),
+								 connflag);
+			mloge << "HTTP Connected: [" << socket->getRemoteAddress().toString() << "]:" << socket->getRemotePort() << dlog;
 			queueLock.unlock();
+			socket = nullptr;
 		}
 
-		this_thread::sleep_for(chrono::milliseconds(200));
+		this_thread::sleep_for(chrono::milliseconds(1));
 	}
 
 	// Close the listener socket.
-	listener->Close();
+	listener->close();
 }
 
 
-void Instance::_HTTPSListener(TcpListener::Ptr listener) {
-	typedef sfn::TlsConnection<sfn::TcpSocket, sfn::TlsEndpointType::Server, sfn::TlsVerificationType::None> Connection;
-
-	Connection::Ptr connection;
-	while (running) {
-		connection = nullptr;
-		// Dequeue any connections from the listener.
-		while ((connection = listener->GetPendingConnection<Connection>())) {
-			// Set the server certificate and key pair.
-			connection->SetCertificateKeyPair(cert, key);
-			// Turn off connection lingering.
-			connection->SetLinger(0);
-			// Create a handler thread and store the connection.
-			queueLock.lock();
-			sockets.emplace_back(connection,
-								 make_shared<thread>(&Instance::_connectionHandler, this, connection));
-			mloge << "HTTPS Connected: [" << ansiToWstring((string)connection->GetRemoteEndpoint().GetAddress()) << "]:" << connection->GetRemoteEndpoint().GetPort() << dlog;
-			queueLock.unlock();
-		}
-
-		this_thread::sleep_for(chrono::milliseconds(200));
-	}
-
-	// Close the listener socket.
-	listener->Close();
-}
-
-
-void Instance::_connectionHandler(TcpSocket::Ptr socket) {
-	Endpoint remote = socket->GetRemoteEndpoint();
-	while (!(socket->LocalHasShutdown() || socket->RemoteHasShutdown())) {
+void Instance::_connectionHandler(shared_ptr<TcpSocket> socket, shared_ptr<atomic_bool> connected) {
+	IpAddress remoteIp = socket->getRemoteAddress();
+	Uint16 remotePort = socket->getRemotePort();
+	while (*connected) {
 		int CRLFCount = 0;
 		char c;
 		string header;
 		header.clear();
 		// Receive a new request
+		socket->setBlocking(true);
 		try {
 			while (!isalpha(c = getchar(socket)));
 			header.push_back(c);
@@ -193,6 +133,7 @@ void Instance::_connectionHandler(TcpSocket::Ptr socket) {
 					CRLFCount = 0;
 			}
 		} catch (DisconnectedException) {
+			(*connected) = false;
 			break;
 		}
 
@@ -211,13 +152,13 @@ void Instance::_connectionHandler(TcpSocket::Ptr socket) {
 			size_t len = atoi(lenstr.c_str());
 			string body(len, '\0');
 			char* bodydata = body.data();
-			while (!(socket->LocalHasShutdown() || socket->RemoteHasShutdown()) && bodydata < body.data() + len)
-				bodydata += socket->Receive(bodydata, len - (bodydata - body.data()));
+			size_t readlen;
+			socket->receive(bodydata, len - (bodydata - body.data()), readlen);
 			request.SetBody(body);
 		}
 
 		// Request ok, dispatch it
-		mloge << "Endpoint " << (string)remote.GetAddress() << " sended a request" << dlog;
+		mloge << "Endpoint [" << remoteIp.toString() << "] sended a request" << dlog;
 		mloge << "    Method: " << request.GetMethod() << ", URI: " << request.GetURI() << dlog;
 		mloge << "    Body: " << (request.GetBody().empty() ? "(empty)"s : request.GetBody()) << dlog;
 		HTTPResponseWrapper::Ptr response = _dispatchRequest(request);
@@ -228,12 +169,12 @@ void Instance::_connectionHandler(TcpSocket::Ptr socket) {
 
 		// If Connection: close, close the connection
 		if (response->GetHeaderValue("Connection") == "close") {
-			socket->Close();
+			socket->disconnect();
+			(*connected) = false;
 		}
 	}
-	if (!socket->LocalHasShutdown())
-		socket->Shutdown();
-	mloge << "Endpoint " << (string)remote.GetAddress() << " closed." << dlog;
+	socket->disconnect();
+	mloge << "Endpoint " << remoteIp.toString() << " closed." << dlog;
 }
 
 

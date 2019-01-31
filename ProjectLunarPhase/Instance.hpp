@@ -8,25 +8,16 @@
 class Instance {
 public:
 
-	typedef sfn::TlsConnection<sfn::TcpSocket, sfn::TlsEndpointType::Server, sfn::TlsVerificationType::None> HTTPSConnection;
-
 	enum RequestMethod {
 		Get,
 		Post
 	};
 
 	struct Config {
-		// Use HTTPS
-		bool useHTTPS = false;
-		// Use IPv4 Listener
-		bool listenIPv4 = true;
-		// Use IPv6 Listener
-		bool listenIPv6 = true;
+		Config() {}
 
 		// Port the HTTP server will be listening
 		Uint16 port = 5000;
-		// Port the HTTPS server will be listening
-		Uint16 portHTTPS = 5443;
 
 		// Filename of the Base 64 DER encoded certificate
 		wstring cert = wstring();
@@ -39,7 +30,7 @@ public:
 
 	// The function will return instantly, leaving worker
 	// threads to handle the connections
-	void start(Config&& config = Config{});
+	void start(Config&& config = Config());
 
 	void stop();
 
@@ -65,32 +56,23 @@ private:
 
 	friend class HTTPHandler;
 
-	void _HTTPListener(TcpListener::Ptr listener);
-	void _HTTPSListener(TcpListener::Ptr listener);
+	void _HTTPListener(shared_ptr<TcpListener> listener);
 	void _maintainer();
 
-	void _connectionHandler(TcpSocket::Ptr socket);
+	void _connectionHandler(shared_ptr<TcpSocket> socket, shared_ptr<atomic_bool> connected);
 
 	//TODO Use a better container than std::list and std::tuple
 	list<tuple<regex, regex, RouteHandlerFunction>> getRoutes, postRoutes;
 	HTTPResponseWrapper::Ptr _dispatchRequest(HTTPRequest& request);
 
-	shared_ptr<thread> httpListener, httpsListener;
-	shared_ptr<thread> httpListenerV6, httpsListenerV6;
+	shared_ptr<thread> httpListener;
 	shared_ptr<thread> maintainer;
-	std::list<pair<sfn::TcpSocket::Ptr, shared_ptr<thread>>> sockets;
+	std::list<tuple<shared_ptr<TcpSocket>, shared_ptr<thread>, shared_ptr<atomic_bool>>> sockets;
 	mutex queueLock;
 
 	atomic_bool running;
 
-	bool useHTTPS;
-	bool listenIPv4;
-	bool listenIPv6;
-
-	Uint16 port, portHTTPS;
-
-	TlsCertificate::Ptr cert;
-	TlsKey::Ptr key;
+	Uint16 port;
 };
 
 

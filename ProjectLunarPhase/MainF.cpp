@@ -62,8 +62,33 @@ wstring ansiToWstring(const string& source) {
 	return buffer;
 }
 
-#elif
-#pragma error("I'm too lazy to implement a cross-platform UTF-8 <-> wchar_t convertion")
+#else
+
+string wstringToUtf8(const wstring& source) {
+	// In C++11+, std::string stores a null-terminated string. Funtcion string::c_str() returns the beginning of the array.
+	mbstate_t state = mbstate_t();
+	const wchar_t* src = source.c_str();
+	size_t size = wcsrtombs(nullptr, &src, 0, &state);
+	string buffer(size, '\0');
+	wcsrtombs(buffer.data(), &src, buffer.size() + 1, &state);
+	return buffer;
+}
+
+wstring utf8ToWstring(const string& source) {
+	// HACK Assuming ANSI == UTF-8 on non-Windows platforms
+	mbstate_t state = mbstate_t();
+	const char* src = source.c_str();
+	size_t size = mbsrtowcs(nullptr, &src, 0, &state);
+	wstring buffer(size, L'\0');
+	mbsrtowcs(buffer.data(), &src, buffer.size() + 1, &state);
+	return buffer;
+}
+
+wstring ansiToWstring(const string& source) {
+	// HACK Assuming ANSI == UTF-8 on non-Windows platforms
+	return utf8ToWstring(source);
+}
+
 #endif
 
 string decodePercentEncoding(const string& source) {
@@ -145,7 +170,8 @@ map<string, string> decodeCookieSequence(string body) {
 }
 
 string readFileBinary(const wstring& filename) {
-	ifstream file(filename, ifstream::binary);
+	ifstream file;
+	OPEN_FSTREAM_WSTR(file, filename, ifstream::binary);
 	if (!file)
 		return string();
 
@@ -169,7 +195,8 @@ string readFileBinaryCached(const wstring& filename) {
 		else
 			i->second.first = chrono::steady_clock::now();
 
-		ifstream file(filename, ifstream::binary);
+		ifstream file;
+		OPEN_FSTREAM_WSTR(file, filename, ifstream::binary);
 		if (!file)
 			return string();
 

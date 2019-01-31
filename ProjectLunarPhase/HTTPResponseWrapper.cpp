@@ -45,7 +45,7 @@ HTTPStringData::HTTPStringData() {
 }
 
 
-void HTTPResponseShort::send(TcpSocket::Ptr socket) {
+void HTTPResponseShort::send(shared_ptr<TcpSocket> socket) {
 	SetHTTPVersion("HTTP/1.1");
 	SetStatus("200 OK");
 	SetHeaderValue("Server", completeServerName);
@@ -61,12 +61,13 @@ void HTTPResponseShort::send(TcpSocket::Ptr socket) {
 	SetBodyComplete();
 	SetHeaderComplete();
 	string data = ToString();
-	socket->Send(data.data(), data.length());
+	socket->send(data.data(), data.length());
 }
 
 
-void HTTPResponseFile::send(TcpSocket::Ptr socket) {
-	file.open(filename, ifstream::in | ifstream::binary);
+void HTTPResponseFile::send(shared_ptr<TcpSocket> socket) {
+
+	OPEN_FSTREAM_WSTR(file, filename, ifstream::in | ifstream::binary);
 
 	// Return 404 Not Found if the stream was not opened
 	if (!file) {
@@ -93,19 +94,18 @@ void HTTPResponseFile::send(TcpSocket::Ptr socket) {
 
 	// Send header
 	string data = ToString();
-	socket->Send(data.data(), data.length());
+	socket->send(data.data(), data.length());
 
 	// Send the file
-	constexpr size_t maxBufferSize = 1024 * 1024; // 1M buffer
-	SetMaximumBlockSize(max(2.5*maxBufferSize, 2.2*fileSize));
+	constexpr size_t maxBufferSize = 512 * 1024; // 512K buffer
 	size_t bufferSize = min(maxBufferSize, fileSize);
 	char* buffer = new char[bufferSize];
 
+	socket->setBlocking(true);
 	while (!file.eof()) {
 		file.read(buffer, bufferSize);
 		if (file.gcount() > 0)
-			while (!(socket->LocalHasShutdown() || socket->RemoteHasShutdown()) && !socket->Send(buffer, file.gcount()))
-				this_thread::sleep_for(chrono::milliseconds(5));
+			while ((socket->send(buffer, file.gcount())) != Socket::Disconnected);
 	}
 
 	delete[] buffer;
@@ -113,7 +113,7 @@ void HTTPResponseFile::send(TcpSocket::Ptr socket) {
 	file.close();
 }
 
-void HTTPResponseTemplate::send(TcpSocket::Ptr socket) {
+void HTTPResponseTemplate::send(shared_ptr<TcpSocket> socket) {
 	// As a template, we have to read all of the file
 	string body = readFileBinaryCached(filename);
 
@@ -141,11 +141,11 @@ void HTTPResponseTemplate::send(TcpSocket::Ptr socket) {
 
 	// Send the header and body
 	string data = ToString();
-	socket->Send(data.data(), data.length());
+	socket->send(data.data(), data.length());
 }
 
 
-void HTTPResponseError::send(TcpSocket::Ptr socket) {
+void HTTPResponseError::send(shared_ptr<TcpSocket> socket) {
 	// Create a error response
 	char data[] =
 		"HTTP/1.1 %STR%\r\n"
@@ -163,12 +163,12 @@ void HTTPResponseError::send(TcpSocket::Ptr socket) {
 	string realData = StringParser::replaceSubString(data, { { "%STR%", to_string(code) + ' ' + httpdata.getResponseString(code) } });
 
 	// Send it and shutdown the connection
-	socket->Send(realData.data(), realData.length());
-	socket->Shutdown();
+	socket->send(realData.data(), realData.length());
+	socket->disconnect();
 }
 
 
-void HTTPResponseRedirection::send(TcpSocket::Ptr socket) {
+void HTTPResponseRedirection::send(shared_ptr<TcpSocket> socket) {
 	// Create an analogous redirect response
 	char header[] =
 		"HTTP/1.1 %STR%\r\n"
@@ -195,8 +195,8 @@ void HTTPResponseRedirection::send(TcpSocket::Ptr socket) {
 	, { "%COOKIE%", cookies.empty() ? "" : ("Set-Cookie: " + encodeCookieSequence(cookies) + "\r\n") } });
 
 	// Send the header and the body (without closing the connection)
-	socket->Send(realHeader.data(), realHeader.length());
-	socket->Send(realBody.data(), realBody.length());
+	socket->send(realHeader.data(), realHeader.length());
+	socket->send(realBody.data(), realBody.length());
 }
 
 

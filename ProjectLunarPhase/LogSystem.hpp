@@ -98,10 +98,13 @@ public:
 	LogMessage& operator <<(unsigned short      data) { buffer += to_wstring(data); return *this; }
 	LogMessage& operator <<(int                 data) { buffer += to_wstring(data); return *this; }
 	LogMessage& operator <<(unsigned int        data) { buffer += to_wstring(data); return *this; }
+	LogMessage& operator <<(long                data) { buffer += to_wstring(data); return *this; }
+	LogMessage& operator <<(unsigned long       data) { buffer += to_wstring(data); return *this; }
 	LogMessage& operator <<(long long           data) { buffer += to_wstring(data); return *this; }
 	LogMessage& operator <<(unsigned long long  data) { buffer += to_wstring(data); return *this; }
 	LogMessage& operator <<(float               data) { buffer += to_wstring(data); return *this; }
 	LogMessage& operator <<(double              data) { buffer += to_wstring(data); return *this; }
+	LogMessage& operator <<(long double         data) { buffer += to_wstring(data); return *this; }
 	LogMessage& operator <<(const wchar_t*      data) { buffer += wstring(data); return *this; }
 	LogMessage& operator <<(const char*         data) { buffer += utf8ToWstring(data); return *this; }
 	LogMessage& operator <<(const wstring&      data) { buffer += data; return *this; }
